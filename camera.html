@@ -1,0 +1,64 @@
+<!-- 1. ส่วนโครงสร้าง HTML ที่จำเป็น -->
+<div id="reader" style="width: 300px; height: 300px;"></div>
+<button onclick="startCamera()">เปิดกล้อง</button>
+<button onclick="stopCamera()">ปิดกล้อง</button>
+
+<!-- 2. นำเข้า Library -->
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<script>
+    let html5QrCode = null;
+    let isScanning = false;
+
+    // 3. ฟังก์ชันเริ่มเปิดกล้อง
+    async function startCamera() {
+        if (isScanning) return; // ป้องกันการกดซ้ำ
+
+        // สร้าง Instance ของสแกนเนอร์โดยอ้างอิง ID "reader" จาก HTML
+        html5QrCode = new Html5Qrcode("reader");
+        
+        const config = { 
+            fps: 10,              // ความเร็วในการจับภาพ (เฟรมต่อวินาที)
+            qrbox: { width: 250, height: 250 } // ขนาดกรอบเล็งสแกน
+        };
+
+        try {
+            // เริ่มต้นใช้งานกล้องหลัง (facingMode: "environment")
+            await html5QrCode.start(
+                { facingMode: "environment" }, 
+                config, 
+                (decodedText) => {
+                    // --- ส่วนนี้จะทำงานเมื่อสแกนเจอ QR Code ---
+                    console.log("สแกนเจอข้อมูล:", decodedText);
+                    alert("ข้อมูลที่อ่านได้: " + decodedText);
+                    
+                    // หลังจากสแกนเจอ ปกติเราจะสั่งหยุดกล้อง
+                    stopCamera();
+                }
+            );
+            isScanning = true;
+            console.log("กล้องเริ่มทำงานแล้ว");
+        } catch (err) {
+            // --- จัดการกรณีเกิดข้อผิดพลาด ---
+            console.error("ไม่สามารถเปิดกล้องได้:", err);
+            if (err.name === "NotAllowedError") {
+                alert("กรุณาอนุญาตให้เข้าถึงกล้องในหน้าตั้งค่าของเบราว์เซอร์");
+            } else {
+                alert("เกิดข้อผิดพลาด: " + err.message);
+            }
+        }
+    }
+
+    // 4. ฟังก์ชันปิดกล้องอย่างปลอดภัย
+    async function stopCamera() {
+        if (!html5QrCode || !isScanning) return;
+
+        try {
+            await html5QrCode.stop();
+            isScanning = false;
+            console.log("ปิดกล้องเรียบร้อย");
+        } catch (err) {
+            console.warn("ไม่สามารถหยุดกล้องได้ หรือกล้องถูกปิดไปก่อนแล้ว:", err);
+        }
+    }
+</script>
