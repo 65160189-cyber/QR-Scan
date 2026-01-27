@@ -22,6 +22,15 @@
             border: 1px solid rgba(255, 255, 255, 0.5);
         }
 
+        /* Shake Animation สำหรับรหัสผิด */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            50% { transform: translateX(8px); }
+            75% { transform: translateX(-8px); }
+        }
+        .shake { animation: shake 0.4s ease-in-out; }
+
         /* Switcher Design (Slide Button) */
         .ios-switcher-container {
             position: relative;
@@ -162,7 +171,7 @@
 
     <!-- Login Overlay -->
     <div id="loginOverlay" class="fixed inset-0 z-[100] bg-slate-900 flex items-center justify-center p-6">
-        <div class="w-full max-w-sm glass-panel p-8 rounded-[2.5rem] shadow-2xl">
+        <div id="loginCard" class="w-full max-w-sm glass-panel p-8 rounded-[2.5rem] shadow-2xl transition-all duration-300">
             <div class="text-center mb-8">
                 <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-indigo-500/30">
                     <i data-lucide="shield-check" class="w-10 h-10 text-white"></i>
@@ -175,7 +184,7 @@
                 <div class="group relative">
                     <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-4 mb-1 block">Staff Entry</label>
                     <form onsubmit="event.preventDefault(); login('warehouse');" class="relative">
-                        <input type="password" id="staffPass" placeholder="รหัสผ่านพนักงาน" class="w-full bg-slate-100 border-none rounded-2xl py-4 pl-12 pr-4 focus:ring-2 focus:ring-indigo-500 transition-all outline-none text-sm">
+                        <input type="password" id="staffPass" placeholder="รหัสผ่านพนักงาน" class="w-full bg-slate-100 border-2 border-transparent rounded-2xl py-4 pl-12 pr-4 focus:bg-white focus:border-indigo-500 transition-all outline-none text-sm">
                         <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2"></i>
                         <button type="submit" class="absolute right-2 top-2 bottom-2 bg-indigo-600 text-white px-4 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors">Login</button>
                     </form>
@@ -260,7 +269,7 @@
 
     <!-- Toast -->
     <div id="toast" class="fixed top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-2xl text-sm font-bold shadow-2xl opacity-0 transition-all duration-500 z-[200] flex items-center gap-3 pointer-events-none">
-        <i data-lucide="check-circle-2" class="text-green-400 w-5 h-5"></i>
+        <i id="toastIcon" data-lucide="check-circle-2" class="text-green-400 w-5 h-5"></i>
         <span id="toastMsg">สำเร็จ</span>
     </div>
 
@@ -287,7 +296,7 @@
 
             try {
                 await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                    showToast("สแกนสำเร็จ: " + decodedText);
+                    showToast("สแกนสำเร็จ: " + decodedText, "success");
                     stopCamera();
                 });
                 isCameraOn = true;
@@ -296,7 +305,7 @@
                 btnText.innerText = "กำลังสแกน...";
                 btnStop.classList.remove('hidden');
             } catch (err) {
-                showToast("ไม่สามารถเข้าถึงกล้องได้");
+                showToast("ไม่สามารถเข้าถึงกล้องได้", "error");
             }
         }
 
@@ -346,18 +355,26 @@
 
         function login(role) {
             const passInput = document.getElementById('staffPass');
+            const loginCard = document.getElementById('loginCard');
+
             if (role === 'warehouse') {
                 if (passInput.value === STAFF_PASSWORD) {
                     isStaff = true;
-                    // ล้างรหัสผ่านทันทีที่ล็อกอินสำเร็จ
                     passInput.value = '';
                     proceedToApp(role);
                 } else {
-                    showToast("รหัสผ่านไม่ถูกต้อง");
+                    // แจ้งเตือนรหัสผิด
+                    showToast("รหัสผ่านพนักงานไม่ถูกต้อง", "error");
+                    loginCard.classList.add('shake');
+                    passInput.classList.replace('border-transparent', 'border-red-500');
+                    
+                    setTimeout(() => {
+                        loginCard.classList.remove('shake');
+                        passInput.classList.replace('border-red-500', 'border-transparent');
+                    }, 500);
                 }
             } else {
                 isStaff = false;
-                // ล้างรหัสผ่านกรณีมีการพิมพ์ค้างไว้แล้วเปลี่ยนใจเข้าโหมดลูกค้า
                 passInput.value = '';
                 proceedToApp(role);
             }
@@ -372,15 +389,29 @@
 
         function logout() {
             stopCamera();
-            // ตรวจสอบความแน่ใจอีกครั้งว่า Input ว่างเปล่าเมื่อกลับหน้าล็อกอิน
             document.getElementById('staffPass').value = '';
             document.getElementById('loginOverlay').classList.remove('hidden');
             document.getElementById('app').classList.add('hidden');
         }
 
-        function showToast(msg) {
+        function showToast(msg, type = "success") {
             const toast = document.getElementById('toast');
-            document.getElementById('toastMsg').innerText = msg;
+            const toastIcon = document.getElementById('toastIcon');
+            const toastMsg = document.getElementById('toastMsg');
+            
+            toastMsg.innerText = msg;
+            
+            if (type === "error") {
+                toast.classList.replace('bg-slate-900', 'bg-red-600');
+                toastIcon.setAttribute('data-lucide', 'alert-circle');
+                toastIcon.classList.replace('text-green-400', 'text-white');
+            } else {
+                toast.classList.replace('bg-red-600', 'bg-slate-900');
+                toastIcon.setAttribute('data-lucide', 'check-circle-2');
+                toastIcon.classList.replace('text-white', 'text-green-400');
+            }
+            
+            lucide.createIcons();
             toast.style.opacity = '1';
             setTimeout(() => toast.style.opacity = '0', 2500);
         }
