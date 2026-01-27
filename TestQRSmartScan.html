@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Premium QR Kanban Delivery - Hybrid Edition</title>
+    <title>Premium QR Kanban - Uniform Design</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -29,26 +29,29 @@
         }
         .shake { animation: shake 0.4s ease-in-out; }
 
+        /* Unified Switcher Style */
         .ios-switcher-container {
             position: relative;
-            background: rgba(0, 0, 0, 0.2);
-            padding: 3px;
-            border-radius: 16px;
+            background: rgba(0, 0, 0, 0.08);
+            padding: 4px;
+            border-radius: 18px;
             display: flex;
             width: 100%;
             isolation: isolate;
         }
 
+        .header-switcher { background: rgba(0, 0, 0, 0.2); }
+
         .ios-slider {
             position: absolute;
-            top: 3px;
-            bottom: 3px;
-            left: 3px;
-            width: calc(50% - 3px);
+            top: 4px;
+            bottom: 4px;
+            left: 4px;
+            width: calc(50% - 4px);
             background: white;
-            border-radius: 13px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border-radius: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
             z-index: 0;
         }
 
@@ -57,20 +60,26 @@
             z-index: 1;
             flex: 1;
             padding: 12px 0;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             text-align: center;
-            color: rgba(255, 255, 255, 0.8);
+            color: #64748b;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 8px;
             cursor: pointer;
         }
 
-        .ios-tab.active-w { color: #4f46e5 !important; }
-        .ios-tab.active-c { color: #f97316 !important; }
+        /* Active states for Role Switcher (Header) */
+        .header-tab { color: rgba(255, 255, 255, 0.7); }
+        .header-tab.active-w { color: #4f46e5 !important; }
+        .header-tab.active-c { color: #f97316 !important; }
+
+        /* Active states for Mode Switcher (Main) */
+        .mode-tab.active-w { color: #4f46e5 !important; }
+        .mode-tab.active-c { color: #ea580c !important; }
 
         .scan-line {
             position: absolute;
@@ -161,35 +170,35 @@
 
     <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col relative pb-20 hidden">
         
-        <header id="mainHeader" class="bg-indigo-600 text-white p-6 rounded-b-[2.5rem] shadow-2xl sticky top-0 z-50 transition-colors duration-500">
-            <div class="flex items-center justify-between mb-5">
+        <!-- Header with Role Switcher -->
+        <header id="mainHeader" class="bg-indigo-600 text-white p-6 rounded-b-[3rem] shadow-2xl sticky top-0 z-50 transition-colors duration-500">
+            <div class="flex items-center justify-between mb-6">
                 <div>
                     <p class="text-indigo-100 text-[10px] font-bold uppercase tracking-[0.2em]">Logistics Hub</p>
                     <h1 class="text-2xl font-black tracking-tight">Smart Kanban</h1>
                 </div>
-                <div class="flex items-center gap-2">
-                    <div id="roleIndicator" class="bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-2xl border border-white/30 text-[10px] font-black uppercase tracking-widest text-white">Warehouse</div>
-                    <button onclick="logout()" class="bg-white/10 p-2.5 rounded-xl hover:bg-red-500/20">
-                        <i data-lucide="log-out" class="w-4 h-4 text-white"></i>
-                    </button>
-                </div>
+                <button onclick="logout()" class="bg-white/10 p-3 rounded-2xl hover:bg-red-500/20">
+                    <i data-lucide="log-out" class="w-5 h-5 text-white"></i>
+                </button>
             </div>
             
-            <div id="staffSwitcher" class="ios-switcher-container hidden">
-                <div id="iosSlider" class="ios-slider"></div>
-                <button onclick="setRole('warehouse')" id="tabW" class="ios-tab active-w"><i data-lucide="package-2" class="w-4 h-4"></i> คลังสินค้า</button>
-                <button onclick="setRole('customer')" id="tabC" class="ios-tab"><i data-lucide="users" class="w-4 h-4"></i> ลูกค้า</button>
+            <div id="staffSwitcher" class="ios-switcher-container header-switcher hidden">
+                <div id="roleSlider" class="ios-slider"></div>
+                <button onclick="setRole('warehouse')" id="roleTabW" class="ios-tab header-tab active-w"><i data-lucide="package-2" class="w-4 h-4"></i> คลังสินค้า</button>
+                <button onclick="setRole('customer')" id="roleTabC" class="ios-tab header-tab"><i data-lucide="users" class="w-4 h-4"></i> ลูกค้า</button>
             </div>
         </header>
 
         <main class="flex-1 p-6 space-y-6">
-            <!-- Mode Selector (Scan vs Manual) -->
-            <div class="flex bg-slate-200 p-1 rounded-2xl shadow-inner">
-                <button onclick="switchInputMode('scan')" id="modeScan" class="flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 bg-white text-indigo-600 shadow-sm transition-all duration-300">
-                    <i data-lucide="camera" class="w-4 h-4"></i> Camera
+            
+            <!-- Mode Switcher (Same design as Role Switcher) -->
+            <div class="ios-switcher-container bg-slate-200">
+                <div id="modeSlider" class="ios-slider shadow-md"></div>
+                <button onclick="switchInputMode('scan')" id="modeTabScan" class="ios-tab mode-tab active-w">
+                    <i data-lucide="camera" class="w-4 h-4"></i> CAMERA SCAN
                 </button>
-                <button onclick="switchInputMode('manual')" id="modeManual" class="flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 text-slate-500 transition-all duration-300">
-                    <i data-lucide="keyboard" class="w-4 h-4"></i> Manual Input
+                <button onclick="switchInputMode('manual')" id="modeTabManual" class="ios-tab mode-tab">
+                    <i data-lucide="keyboard" class="w-4 h-4"></i> MANUAL
                 </button>
             </div>
 
@@ -211,7 +220,7 @@
                     <div class="flex gap-2">
                         <button onclick="toggleCamera()" id="btnScanAction" class="btn-main btn-warehouse">
                             <i data-lucide="camera"></i>
-                            <span id="scanBtnText">เปิดกล้องสแกน</span>
+                            <span id="scanBtnText">CAMERA SCAN</span>
                         </button>
                         <button id="btnStopCamera" onclick="stopCamera()" class="hidden bg-red-100 text-red-600 px-5 rounded-2xl active:scale-95 transition-all">
                             <i data-lucide="video-off" class="w-6 h-6"></i>
@@ -222,12 +231,12 @@
                 <!-- Manual View -->
                 <div id="manualView" class="mode-transition hidden py-4">
                     <div class="text-center mb-6">
-                        <h3 class="text-lg font-black text-slate-800">กรอกรหัส Kaban</h3>
-                        <p class="text-slate-400 text-xs mt-1">กรอกรหัส Kanban เพื่อดึงข้อมูล</p>
+                        <h3 class="text-lg font-black text-slate-800">Manual Entry</h3>
+                        <p class="text-slate-400 text-xs mt-1">กรอกรหัส Kanban เพื่อดำเนินการ</p>
                     </div>
                     <div class="space-y-4">
                         <div class="relative">
-                            <input type="text" id="manualInput" placeholder="รหัส Kaban เช่น(AB229)" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-5 px-6 focus:bg-white focus:border-indigo-500 transition-all outline-none text-center text-xl font-black uppercase">
+                            <input type="text" id="manualInput" placeholder="รหัสสินค้า" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-5 px-6 focus:bg-white focus:border-indigo-500 transition-all outline-none text-center text-xl font-black uppercase">
                         </div>
                         <button onclick="processManualEntry()" id="btnManualSubmit" class="btn-main btn-warehouse py-5">
                             <i data-lucide="check-circle"></i>
@@ -237,6 +246,7 @@
                 </div>
             </div>
 
+            <!-- History -->
             <section id="historySection">
                 <div class="flex items-center justify-between mb-4 px-2">
                     <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">ประวัติล่าสุด</h3>
@@ -256,48 +266,85 @@
     <script>
         const STAFF_PASSWORD = "1234";
         let currentRole = 'warehouse';
+        let currentInputMode = 'scan';
         let isStaff = false;
         let isCameraOn = false;
         let html5QrCode = null;
-        let inputMode = 'scan';
 
         function switchInputMode(mode) {
-            inputMode = mode;
+            currentInputMode = mode;
             stopCamera();
             
+            const modeSlider = document.getElementById('modeSlider');
+            const modeTabScan = document.getElementById('modeTabScan');
+            const modeTabManual = document.getElementById('modeTabManual');
             const scanView = document.getElementById('scanView');
             const manualView = document.getElementById('manualView');
-            const modeScan = document.getElementById('modeScan');
-            const modeManual = document.getElementById('modeManual');
 
             if (mode === 'scan') {
+                modeSlider.style.transform = 'translateX(0)';
                 scanView.classList.remove('hidden');
                 manualView.classList.add('hidden');
-                modeScan.className = "flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 bg-white shadow-sm text-indigo-600";
-                modeManual.className = "flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 text-slate-500";
             } else {
+                modeSlider.style.transform = 'translateX(100%)';
                 scanView.classList.add('hidden');
                 manualView.classList.remove('hidden');
-                modeManual.className = "flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 bg-white shadow-sm text-indigo-600";
-                modeScan.className = "flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 text-slate-500";
-                document.getElementById('manualInput').focus();
+                setTimeout(() => document.getElementById('manualInput').focus(), 100);
             }
-            updateModeButtonColors();
-            lucide.createIcons();
+            updateActiveTabStyles();
         }
 
-        function updateModeButtonColors() {
-            const activeBtn = inputMode === 'scan' ? document.getElementById('modeScan') : document.getElementById('modeManual');
-            if (currentRole === 'warehouse') {
-                activeBtn.style.color = '#4f46e5';
+        function setRole(role) {
+            stopCamera();
+            currentRole = role;
+            
+            const roleSlider = document.getElementById('roleSlider');
+            const header = document.getElementById('mainHeader');
+            const btnScan = document.getElementById('btnScanAction');
+            const btnManual = document.getElementById('btnManualSubmit');
+            const scanIcon = document.getElementById('scanIcon');
+
+            if (role === 'warehouse') {
+                roleSlider.style.transform = 'translateX(0)';
+                header.style.backgroundColor = '#4f46e5';
+                btnScan.className = "btn-main btn-warehouse";
+                btnManual.className = "btn-main btn-warehouse py-5";
+                scanIcon.className = "w-16 h-16 text-indigo-500";
             } else {
-                activeBtn.style.color = '#ea580c';
+                roleSlider.style.transform = 'translateX(100%)';
+                header.style.backgroundColor = '#ea580c';
+                btnScan.className = "btn-main btn-customer";
+                btnManual.className = "btn-main btn-customer py-5";
+                scanIcon.className = "w-16 h-16 text-orange-500";
             }
+            
+            updateActiveTabStyles();
         }
 
-        async function toggleCamera() {
-            if (isCameraOn) stopCamera();
-            else startCamera();
+        function updateActiveTabStyles() {
+            // Header Tabs
+            const roleTabW = document.getElementById('roleTabW');
+            const roleTabC = document.getElementById('roleTabC');
+            roleTabW.classList.toggle('active-w', currentRole === 'warehouse');
+            roleTabC.classList.toggle('active-c', currentRole === 'customer');
+
+            // Mode Tabs
+            const modeTabScan = document.getElementById('modeTabScan');
+            const modeTabManual = document.getElementById('modeTabManual');
+            
+            // Remove all active colors
+            modeTabScan.classList.remove('active-w', 'active-c');
+            modeTabManual.classList.remove('active-w', 'active-c');
+
+            // Add correct active color based on role and mode
+            const activeClass = currentRole === 'warehouse' ? 'active-w' : 'active-c';
+            if (currentInputMode === 'scan') {
+                modeTabScan.classList.add(activeClass);
+                modeTabManual.style.color = '#64748b';
+            } else {
+                modeTabManual.classList.add(activeClass);
+                modeTabScan.style.color = '#64748b';
+            }
         }
 
         async function startCamera() {
@@ -330,6 +377,10 @@
             } catch (err) {}
         }
 
+        function toggleCamera() {
+            if (isCameraOn) stopCamera(); else startCamera();
+        }
+
         function handleSuccessfulEntry(code) {
             showToast("รับข้อมูลรหัส: " + code, "success");
             addToHistory(code);
@@ -339,7 +390,7 @@
         function processManualEntry() {
             const val = document.getElementById('manualInput').value.trim();
             if (val.length < 3) {
-                showToast("รหัสสินค้าสั้นเกินไป", "error");
+                showToast("รหัสสินค้าไม่ถูกต้อง", "error");
                 document.getElementById('manualView').classList.add('shake');
                 setTimeout(() => document.getElementById('manualView').classList.remove('shake'), 400);
                 return;
@@ -368,38 +419,8 @@
             `;
             list.prepend(item);
             lucide.createIcons();
-            
             const count = document.getElementById('historyCount');
             count.innerText = parseInt(count.innerText) + 1;
-        }
-
-        function setRole(role) {
-            stopCamera();
-            currentRole = role;
-            const btnScan = document.getElementById('btnScanAction');
-            const btnManual = document.getElementById('btnManualSubmit');
-            const header = document.getElementById('mainHeader');
-            const slider = document.getElementById('iosSlider');
-            const tabW = document.getElementById('tabW');
-            const tabC = document.getElementById('tabC');
-
-            if (role === 'warehouse') {
-                btnScan.className = "btn-main btn-warehouse";
-                btnManual.className = "btn-main btn-warehouse py-5";
-                header.style.backgroundColor = '#4f46e5';
-                slider.style.transform = 'translateX(0)';
-                tabW.classList.add('active-w');
-                tabC.classList.remove('active-c');
-            } else {
-                btnScan.className = "btn-main btn-customer";
-                btnManual.className = "btn-main btn-customer py-5";
-                header.style.backgroundColor = '#ea580c';
-                slider.style.transform = 'translateX(100%)';
-                tabW.classList.remove('active-w');
-                tabC.classList.add('active-c');
-            }
-            updateModeButtonColors();
-            lucide.createIcons();
         }
 
         function login(role) {
@@ -412,7 +433,7 @@
                     passInput.value = '';
                     proceedToApp(role);
                 } else {
-                    showToast("รหัสผ่านพนักงานไม่ถูกต้อง", "error");
+                    showToast("รหัสผ่านไม่ถูกต้อง", "error");
                     loginCard.classList.add('shake');
                     passInput.classList.replace('border-transparent', 'border-red-500');
                     setTimeout(() => {
@@ -422,7 +443,6 @@
                 }
             } else {
                 isStaff = false;
-                passInput.value = '';
                 proceedToApp(role);
             }
         }
@@ -445,7 +465,6 @@
             const toastIcon = document.getElementById('toastIcon');
             const toastMsg = document.getElementById('toastMsg');
             toastMsg.innerText = msg;
-            
             if (type === "error") {
                 toast.classList.replace('bg-slate-900', 'bg-red-600');
                 toastIcon.setAttribute('data-lucide', 'alert-circle');
@@ -453,7 +472,6 @@
                 toast.classList.replace('bg-red-600', 'bg-slate-900');
                 toastIcon.setAttribute('data-lucide', 'check-circle-2');
             }
-            
             lucide.createIcons();
             toast.style.opacity = '1';
             toast.style.transform = 'translate(-50%, 20px)';
