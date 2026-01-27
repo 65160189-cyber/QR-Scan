@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Premium QR Kanban Delivery - Camera Edition</title>
+    <title>Premium QR Kanban Delivery - Hybrid Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- นำเข้า Library สำหรับสแกน QR Code -->
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&family=Sarabun:wght@300;400;600;700&display=swap');
@@ -22,7 +21,6 @@
             border: 1px solid rgba(255, 255, 255, 0.5);
         }
 
-        /* Shake Animation สำหรับรหัสผิด */
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
             25% { transform: translateX(-8px); }
@@ -31,7 +29,6 @@
         }
         .shake { animation: shake 0.4s ease-in-out; }
 
-        /* Switcher Design (Slide Button) */
         .ios-switcher-container {
             position: relative;
             background: rgba(0, 0, 0, 0.2);
@@ -40,7 +37,6 @@
             display: flex;
             width: 100%;
             isolation: isolate;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .ios-slider {
@@ -51,7 +47,7 @@
             width: calc(50% - 3px);
             background: white;
             border-radius: 13px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
             transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
             z-index: 0;
         }
@@ -71,7 +67,6 @@
             justify-content: center;
             gap: 10px;
             cursor: pointer;
-            border-radius: 13px;
         }
 
         .ios-tab.active-w { color: #4f46e5 !important; }
@@ -91,33 +86,19 @@
 
         @keyframes scanAnim { 0% { top: 0%; } 100% { top: 100%; } }
 
-        /* Scan Button Design */
-        .btn-scan {
+        .btn-main {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 12px;
-            padding: 1.1rem 2rem;
+            padding: 1.1rem;
             border-radius: 1.5rem;
             font-weight: 800;
-            font-size: 1rem;
-            letter-spacing: -0.01em;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
-            position: relative;
-            overflow: hidden;
         }
 
-        .btn-scan:active {
-            transform: scale(0.96);
-            filter: brightness(0.9);
-        }
-
-        .btn-scan i {
-            width: 20px;
-            height: 20px;
-            stroke-width: 2.5px;
-        }
+        .btn-main:active { transform: scale(0.96); }
 
         .btn-warehouse {
             background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
@@ -131,40 +112,11 @@
             box-shadow: 0 10px 25px -5px rgba(234, 88, 12, 0.3);
         }
 
-        #reader {
-            width: 100% !important;
-            height: 100% !important;
-            border: none !important;
-            position: absolute !important;
-            top: 0;
-            left: 0;
-            z-index: 5;
-        }
-        
-        #reader video {
-            object-fit: cover !important;
-            width: 100% !important;
-            height: 100% !important;
-        }
+        #reader { width: 100% !important; height: 100% !important; border: none !important; position: absolute !important; top: 0; left: 0; z-index: 5; }
+        #reader video { object-fit: cover !important; width: 100% !important; height: 100% !important; }
+        #reader__dashboard { display: none !important; }
 
-        #reader__dashboard {
-            display: none !important; 
-        }
-
-        #scanOverlay {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 30;
-            pointer-events: none;
-        }
+        .mode-transition { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
     </style>
 </head>
 <body class="text-slate-900 overflow-x-hidden">
@@ -216,7 +168,7 @@
                     <h1 class="text-2xl font-black tracking-tight">Smart Kanban</h1>
                 </div>
                 <div class="flex items-center gap-2">
-                    <div id="roleIndicator" class="bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-2xl border border-white/30 text-[10px] font-black uppercase tracking-widest">Warehouse</div>
+                    <div id="roleIndicator" class="bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-2xl border border-white/30 text-[10px] font-black uppercase tracking-widest text-white">Warehouse</div>
                     <button onclick="logout()" class="bg-white/10 p-2.5 rounded-xl hover:bg-red-500/20">
                         <i data-lucide="log-out" class="w-4 h-4 text-white"></i>
                     </button>
@@ -230,28 +182,56 @@
             </div>
         </header>
 
-        <main class="flex-1 p-6 space-y-8">
-            <div id="scannerCard" class="bg-white rounded-[2.5rem] p-5 shadow-xl shadow-slate-200/50 border border-slate-100">
-                <div class="aspect-square bg-slate-50 rounded-[2rem] relative overflow-hidden">
-                    <div id="reader"></div>
-                    
-                    <div id="scanOverlay" class="transition-all duration-300">
-                        <div id="scanLine" class="scan-line"></div>
-                        <div class="bg-white p-7 rounded-[2.2rem] shadow-xl border border-slate-50">
-                            <i data-lucide="qr-code" class="w-16 h-16 text-indigo-500 transition-colors duration-500" id="scanIcon"></i>
-                        </div>
-                        <p class="mt-8 text-slate-400 font-bold text-xs uppercase tracking-widest">Ready to Scan</p>
-                    </div>
-                </div>
+        <main class="flex-1 p-6 space-y-6">
+            <!-- Mode Selector (Scan vs Manual) -->
+            <div class="flex bg-slate-200 p-1 rounded-2xl shadow-inner">
+                <button onclick="switchInputMode('scan')" id="modeScan" class="flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 bg-white text-indigo-600 shadow-sm transition-all duration-300">
+                    <i data-lucide="camera" class="w-4 h-4"></i> Camera
+                </button>
+                <button onclick="switchInputMode('manual')" id="modeManual" class="flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 text-slate-500 transition-all duration-300">
+                    <i data-lucide="keyboard" class="w-4 h-4"></i> Manual Input
+                </button>
+            </div>
+
+            <!-- Interaction Card -->
+            <div id="mainCard" class="bg-white rounded-[2.5rem] p-5 shadow-xl shadow-slate-200/50 border border-slate-100 relative overflow-hidden">
                 
-                <div class="flex flex-col gap-3 mt-6">
-                    <div class="flex gap-2 w-full">
-                        <button onclick="toggleCamera()" id="btnScanAction" class="btn-scan btn-warehouse">
+                <!-- Camera View -->
+                <div id="scanView" class="mode-transition block">
+                    <div class="aspect-square bg-slate-50 rounded-[2rem] relative overflow-hidden mb-6">
+                        <div id="reader"></div>
+                        <div id="scanOverlay" class="absolute inset-0 flex flex-col items-center justify-center z-30 pointer-events-none">
+                            <div id="scanLine" class="scan-line"></div>
+                            <div class="bg-white p-7 rounded-[2.2rem] shadow-xl border border-slate-50">
+                                <i data-lucide="qr-code" class="w-16 h-16 text-indigo-500" id="scanIcon"></i>
+                            </div>
+                            <p class="mt-8 text-slate-400 font-bold text-xs uppercase tracking-widest">Ready to Scan</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="toggleCamera()" id="btnScanAction" class="btn-main btn-warehouse">
                             <i data-lucide="camera"></i>
                             <span id="scanBtnText">เปิดกล้องสแกน</span>
                         </button>
                         <button id="btnStopCamera" onclick="stopCamera()" class="hidden bg-red-100 text-red-600 px-5 rounded-2xl active:scale-95 transition-all">
                             <i data-lucide="video-off" class="w-6 h-6"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Manual View -->
+                <div id="manualView" class="mode-transition hidden py-4">
+                    <div class="text-center mb-6">
+                        <h3 class="text-lg font-black text-slate-800">กรอกรหัส Kaban</h3>
+                        <p class="text-slate-400 text-xs mt-1">กรอกรหัส Kanban เพื่อดึงข้อมูล</p>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="relative">
+                            <input type="text" id="manualInput" placeholder="รหัส Kaban เช่น(AB229)" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-5 px-6 focus:bg-white focus:border-indigo-500 transition-all outline-none text-center text-xl font-black uppercase">
+                        </div>
+                        <button onclick="processManualEntry()" id="btnManualSubmit" class="btn-main btn-warehouse py-5">
+                            <i data-lucide="check-circle"></i>
+                            ยืนยันข้อมูล
                         </button>
                     </div>
                 </div>
@@ -279,6 +259,41 @@
         let isStaff = false;
         let isCameraOn = false;
         let html5QrCode = null;
+        let inputMode = 'scan';
+
+        function switchInputMode(mode) {
+            inputMode = mode;
+            stopCamera();
+            
+            const scanView = document.getElementById('scanView');
+            const manualView = document.getElementById('manualView');
+            const modeScan = document.getElementById('modeScan');
+            const modeManual = document.getElementById('modeManual');
+
+            if (mode === 'scan') {
+                scanView.classList.remove('hidden');
+                manualView.classList.add('hidden');
+                modeScan.className = "flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 bg-white shadow-sm text-indigo-600";
+                modeManual.className = "flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 text-slate-500";
+            } else {
+                scanView.classList.add('hidden');
+                manualView.classList.remove('hidden');
+                modeManual.className = "flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 bg-white shadow-sm text-indigo-600";
+                modeScan.className = "flex-1 py-3 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2 text-slate-500";
+                document.getElementById('manualInput').focus();
+            }
+            updateModeButtonColors();
+            lucide.createIcons();
+        }
+
+        function updateModeButtonColors() {
+            const activeBtn = inputMode === 'scan' ? document.getElementById('modeScan') : document.getElementById('modeManual');
+            if (currentRole === 'warehouse') {
+                activeBtn.style.color = '#4f46e5';
+            } else {
+                activeBtn.style.color = '#ea580c';
+            }
+        }
 
         async function toggleCamera() {
             if (isCameraOn) stopCamera();
@@ -286,24 +301,17 @@
         }
 
         async function startCamera() {
-            const scanOverlay = document.getElementById('scanOverlay');
-            const scanLine = document.getElementById('scanLine');
-            const btnText = document.getElementById('scanBtnText');
-            const btnStop = document.getElementById('btnStopCamera');
-
             html5QrCode = new Html5Qrcode("reader");
-            const config = { fps: 20, qrbox: { width: 250, height: 250 } };
-
             try {
-                await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                    showToast("สแกนสำเร็จ: " + decodedText, "success");
+                await html5QrCode.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, (decodedText) => {
+                    handleSuccessfulEntry(decodedText);
                     stopCamera();
                 });
                 isCameraOn = true;
-                scanOverlay.style.opacity = '0';
-                scanLine.style.display = "block";
-                btnText.innerText = "กำลังสแกน...";
-                btnStop.classList.remove('hidden');
+                document.getElementById('scanOverlay').style.opacity = '0';
+                document.getElementById('scanLine').style.display = "block";
+                document.getElementById('scanBtnText').innerText = "กำลังสแกน...";
+                document.getElementById('btnStopCamera').classList.remove('hidden');
             } catch (err) {
                 showToast("ไม่สามารถเข้าถึงกล้องได้", "error");
             }
@@ -322,34 +330,75 @@
             } catch (err) {}
         }
 
+        function handleSuccessfulEntry(code) {
+            showToast("รับข้อมูลรหัส: " + code, "success");
+            addToHistory(code);
+            document.getElementById('manualInput').value = '';
+        }
+
+        function processManualEntry() {
+            const val = document.getElementById('manualInput').value.trim();
+            if (val.length < 3) {
+                showToast("รหัสสินค้าสั้นเกินไป", "error");
+                document.getElementById('manualView').classList.add('shake');
+                setTimeout(() => document.getElementById('manualView').classList.remove('shake'), 400);
+                return;
+            }
+            handleSuccessfulEntry(val);
+        }
+
+        function addToHistory(code) {
+            const list = document.getElementById('historyList');
+            const item = document.createElement('div');
+            item.className = "bg-white p-4 rounded-2xl flex items-center justify-between shadow-sm border border-slate-100 animate-in fade-in slide-in-from-bottom-2 duration-500";
+            const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+            item.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl ${currentRole === 'warehouse' ? 'bg-indigo-50 text-indigo-600' : 'bg-orange-50 text-orange-600'} flex items-center justify-center">
+                        <i data-lucide="package" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-bold text-slate-800">${code}</p>
+                        <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">${currentRole}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] font-black text-slate-300 uppercase">${time}</p>
+                </div>
+            `;
+            list.prepend(item);
+            lucide.createIcons();
+            
+            const count = document.getElementById('historyCount');
+            count.innerText = parseInt(count.innerText) + 1;
+        }
+
         function setRole(role) {
             stopCamera();
             currentRole = role;
-            const btn = document.getElementById('btnScanAction');
-            const btnText = document.getElementById('scanBtnText');
+            const btnScan = document.getElementById('btnScanAction');
+            const btnManual = document.getElementById('btnManualSubmit');
             const header = document.getElementById('mainHeader');
             const slider = document.getElementById('iosSlider');
-            const scanIcon = document.getElementById('scanIcon');
             const tabW = document.getElementById('tabW');
             const tabC = document.getElementById('tabC');
 
             if (role === 'warehouse') {
-                btn.className = "btn-scan btn-warehouse";
-                btnText.innerText = "เปิดกล้องสแกน";
+                btnScan.className = "btn-main btn-warehouse";
+                btnManual.className = "btn-main btn-warehouse py-5";
                 header.style.backgroundColor = '#4f46e5';
-                scanIcon.classList.replace('text-orange-500', 'text-indigo-500');
                 slider.style.transform = 'translateX(0)';
                 tabW.classList.add('active-w');
                 tabC.classList.remove('active-c');
             } else {
-                btn.className = "btn-scan btn-customer";
-                btnText.innerText = "สแกนรับสินค้า";
+                btnScan.className = "btn-main btn-customer";
+                btnManual.className = "btn-main btn-customer py-5";
                 header.style.backgroundColor = '#ea580c';
-                scanIcon.classList.replace('text-indigo-500', 'text-orange-500');
                 slider.style.transform = 'translateX(100%)';
                 tabW.classList.remove('active-w');
                 tabC.classList.add('active-c');
             }
+            updateModeButtonColors();
             lucide.createIcons();
         }
 
@@ -363,11 +412,9 @@
                     passInput.value = '';
                     proceedToApp(role);
                 } else {
-                    // แจ้งเตือนรหัสผิด
                     showToast("รหัสผ่านพนักงานไม่ถูกต้อง", "error");
                     loginCard.classList.add('shake');
                     passInput.classList.replace('border-transparent', 'border-red-500');
-                    
                     setTimeout(() => {
                         loginCard.classList.remove('shake');
                         passInput.classList.replace('border-red-500', 'border-transparent');
@@ -389,7 +436,6 @@
 
         function logout() {
             stopCamera();
-            document.getElementById('staffPass').value = '';
             document.getElementById('loginOverlay').classList.remove('hidden');
             document.getElementById('app').classList.add('hidden');
         }
@@ -398,22 +444,23 @@
             const toast = document.getElementById('toast');
             const toastIcon = document.getElementById('toastIcon');
             const toastMsg = document.getElementById('toastMsg');
-            
             toastMsg.innerText = msg;
             
             if (type === "error") {
                 toast.classList.replace('bg-slate-900', 'bg-red-600');
                 toastIcon.setAttribute('data-lucide', 'alert-circle');
-                toastIcon.classList.replace('text-green-400', 'text-white');
             } else {
                 toast.classList.replace('bg-red-600', 'bg-slate-900');
                 toastIcon.setAttribute('data-lucide', 'check-circle-2');
-                toastIcon.classList.replace('text-white', 'text-green-400');
             }
             
             lucide.createIcons();
             toast.style.opacity = '1';
-            setTimeout(() => toast.style.opacity = '0', 2500);
+            toast.style.transform = 'translate(-50%, 20px)';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%, 0)';
+            }, 2500);
         }
 
         window.onload = () => lucide.createIcons();
