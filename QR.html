@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Kanban - Dynamic Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&family=Sarabun:wght@300;400;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', 'Sarabun', sans-serif; background: #f8fafc; }
+        .glass-panel { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.5); }
+        
+        .ios-switcher-container { position: relative; background: #e2e8f0; padding: 4px; border-radius: 18px; display: flex; width: 100%; isolation: isolate; }
+        .ios-slider { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: white; border-radius: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 0; }
+        .ios-tab { position: relative; z-index: 1; flex: 1; padding: 12px 0; font-size: 13px; font-weight: 700; text-align: center; color: #64748b; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+        
+        .active-w { color: #4f46e5 !important; }
+        .active-c { color: #ea580c !important; }
+        
+        .btn-main { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 1.1rem; border-radius: 1.5rem; font-weight: 800; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); width: 100%; }
+        .btn-main:active { transform: scale(0.96); }
+        .btn-warehouse { background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color: white; box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.3); }
+        .btn-customer { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; box-shadow: 0 10px 25px -5px rgba(234, 88, 12, 0.3); }
+        
+        #reader { width: 100% !important; border: none !important; border-radius: 1.5rem; overflow: hidden; }
+        .history-card { animation: slideUp 0.4s ease-out forwards; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .status-badge { padding: 4px 10px; border-radius: 8px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+        .status-shipping { background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
+        .status-delivered { background: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; }
+        .status-new { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body class="text-slate-900">
+
+    <!-- Login -->
+    <div id="loginOverlay" class="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center p-6">
+        <div class="w-full max-w-sm glass-panel p-8 rounded-[2.5rem] shadow-2xl text-center">
+            <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <i data-lucide="package-search" class="w-10 h-10 text-white"></i>
+            </div>
+            <h2 class="text-2xl font-black text-slate-800 tracking-tight">QR Kanban Pro</h2>
+            <p class="text-slate-500 text-sm mt-1 mb-8">จัดการสถานะสินค้าแบบครบวงจร</p>
+            <div class="space-y-3">
+                <button onclick="login('warehouse')" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-5 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95">
+                    <i data-lucide="warehouse"></i> ฝ่ายคลังสินค้า
+                </button>
+                <button onclick="login('customer')" class="w-full bg-slate-800 hover:bg-black text-white py-5 rounded-2xl font-bold flex items-center justify-center gap-3 transition-all active:scale-95">
+                    <i data-lucide="user"></i> ฝ่ายลูกค้า
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main UI -->
+    <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col hidden bg-slate-50">
+        <header id="appHeader" class="p-6 pb-10 rounded-b-[3rem] shadow-xl sticky top-0 z-50">
+            <div class="flex items-center justify-between text-white">
+                <div>
+                    <span id="roleLabel" class="text-[10px] font-black uppercase tracking-widest opacity-80">ROLE</span>
+                    <h1 id="appTitle" class="text-2xl font-black">QR KANBAN</h1>
+                </div>
+                <button onclick="logout()" class="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                    <i data-lucide="log-out" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </header>
+
+        <main class="p-6 -mt-6 space-y-6">
+            <!-- Selector -->
+            <div class="ios-switcher-container shadow-sm">
+                <div id="modeSlider" class="ios-slider"></div>
+                <div onclick="switchMode('scan')" id="tabScan" class="ios-tab"><i data-lucide="camera" class="w-4 h-4"></i> สแกน QR</div>
+                <div onclick="switchMode('manual')" id="tabManual" class="ios-tab"><i data-lucide="edit-3" class="w-4 h-4"></i> กรอกรหัส</div>
+            </div>
+
+            <!-- Input Section -->
+            <div class="bg-white rounded-[2.5rem] p-5 shadow-sm border border-slate-200/60">
+                <div id="scanView">
+                    <div class="aspect-square bg-slate-100 rounded-[2rem] overflow-hidden relative mb-5 flex items-center justify-center">
+                        <div id="reader"></div>
+                        <div id="scanPlaceholder" class="absolute text-center opacity-40">
+                            <i data-lucide="qr-code" class="w-12 h-12 mx-auto mb-2"></i>
+                            <p class="text-[10px] font-black uppercase">ยังไม่ได้เปิดกล้อง</p>
+                        </div>
+                    </div>
+                    <button id="btnToggleCam" onclick="toggleCamera()" class="btn-main">
+                        <i data-lucide="camera"></i> <span>เริ่มสแกน QR Code</span>
+                    </button>
+                </div>
+
+                <div id="manualView" class="hidden py-4 text-center">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">ใส่รหัสสินค้า (เช่น KB-1001)</p>
+                    <input type="text" id="manualInput" placeholder="KB-XXXX" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-5 px-6 focus:border-indigo-500 outline-none text-center text-2xl font-black uppercase transition-all mb-4">
+                    <button onclick="handleManual()" class="btn-main" id="btnManual">
+                        <i data-lucide="search"></i> ค้นหาสินค้า
+                    </button>
+                </div>
+            </div>
+
+            <!-- Result Card -->
+            <div id="resultArea" class="hidden">
+                <div id="resultContainer" class="bg-white rounded-[2.5rem] p-6 shadow-xl border-2 border-white relative overflow-hidden">
+                    <div id="itemStatusTag" class="absolute top-0 right-0 px-6 py-2 rounded-bl-2xl text-[10px] font-black uppercase text-white">STATUS</div>
+                    <div class="mb-6">
+                        <h3 id="itemName" class="text-xl font-black text-slate-800">ชื่อสินค้า</h3>
+                        <p id="itemCode" class="text-xs font-bold text-slate-400">KB-0000</p>
+                    </div>
+                    <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100 mb-6">
+                        <p id="itemDetail" class="text-sm text-slate-600 font-medium"></p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="closeResult()" class="flex-1 py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl">ยกเลิก</button>
+                        <button id="actionBtn" class="flex-[2] py-4 text-white font-black rounded-2xl shadow-lg transition-transform active:scale-95">ดำเนินการ</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Section -->
+            <div class="space-y-4">
+                <div class="flex items-center justify-between px-2">
+                    <h2 class="font-black text-slate-800 flex items-center gap-2">
+                        <i data-lucide="clock-rewind" class="w-5 h-5 text-indigo-500"></i>
+                        ประวัติรายการจัดส่ง
+                    </h2>
+                    <span id="historyCount" class="bg-indigo-100 text-indigo-600 text-[10px] font-black px-2 py-0.5 rounded-full">0</span>
+                </div>
+                
+                <div id="historyContainer" class="space-y-3">
+                    <div id="emptyState" class="text-center py-12 bg-white rounded-[2.5rem] border border-dashed border-slate-200">
+                        <i data-lucide="package-open" class="w-10 h-10 text-slate-300 mx-auto mb-3"></i>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">ยังไม่มีรายการ</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-2xl text-sm font-bold shadow-2xl opacity-0 translate-y-10 transition-all z-[200]">
+        สำเร็จ
+    </div>
+
+    <script>
+        // Data in memory
+        let items = {
+            "KB-101": { name: "แผงวงจรหลัก", desc: "Mainboard V2", status: "warehouse" },
+            "KB-102": { name: "มอเตอร์ไฟฟ้า", desc: "DC Motor 12V", status: "warehouse" }
+        };
+
+        let currentRole = 'warehouse';
+        let scanner = null;
+        let isCamOpen = false;
+        let history = []; 
+
+        function login(role) {
+            currentRole = role;
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            setupTheme();
+            renderHistory();
+        }
+
+        function setupTheme() {
+            const header = document.getElementById('appHeader');
+            const roleLab = document.getElementById('roleLabel');
+            const title = document.getElementById('appTitle');
+            const btnCam = document.getElementById('btnToggleCam');
+            const btnMan = document.getElementById('btnManual');
+
+            if (currentRole === 'warehouse') {
+                header.className = "p-6 pb-10 rounded-b-[3rem] shadow-xl sticky top-0 z-50 bg-indigo-600";
+                roleLab.innerText = "SENDER ROLE";
+                title.innerText = "ฝ่ายคลังสินค้า";
+                btnCam.className = "btn-main btn-warehouse";
+                btnMan.className = "btn-main btn-warehouse";
+            } else {
+                header.className = "p-6 pb-10 rounded-b-[3rem] shadow-xl sticky top-0 z-50 bg-orange-600";
+                roleLab.innerText = "RECEIVER ROLE";
+                title.innerText = "ฝ่ายรับสินค้า";
+                btnCam.className = "btn-main btn-customer";
+                btnMan.className = "btn-main btn-customer";
+            }
+            switchMode('scan');
+            if(window.lucide) lucide.createIcons();
+        }
+
+        function handleScan(code) {
+            let data = items[code];
+            const area = document.getElementById('resultArea');
+            const tag = document.getElementById('itemStatusTag');
+            const btn = document.getElementById('actionBtn');
+            
+            area.classList.remove('hidden');
+            document.getElementById('itemCode').innerText = code;
+
+            // NEW: If item doesn't exist, allow Warehouse to register it
+            if (!data) {
+                if (currentRole === 'warehouse') {
+                    document.getElementById('itemName').innerText = "สินค้าใหม่";
+                    document.getElementById('itemDetail').innerText = "รหัสนี้ยังไม่ได้ลงทะเบียนในระบบคลัง";
+                    tag.innerText = "ยังไม่พบข้อมูล";
+                    tag.className = "absolute top-0 right-0 px-6 py-2 rounded-bl-2xl text-[10px] font-black uppercase bg-slate-400 text-white";
+                    btn.innerText = "ลงทะเบียนและส่งทันที";
+                    btn.className = "flex-[2] py-4 bg-indigo-600 text-white font-black rounded-2xl shadow-lg";
+                    btn.onclick = () => {
+                        items[code] = { name: "สินค้าจัดส่ง ("+code+")", desc: "ลงทะเบียนผ่านระบบหน้างาน", status: "warehouse" };
+                        updateProduct(code, 'shipping');
+                    };
+                    btn.disabled = false;
+                } else {
+                    document.getElementById('itemName').innerText = "ไม่พบข้อมูล";
+                    document.getElementById('itemDetail').innerText = "ไม่พบสินค้านี้ในระบบจัดส่ง กรุณาติดต่อคลังสินค้า";
+                    tag.innerText = "INVALID";
+                    tag.className = "absolute top-0 right-0 px-6 py-2 rounded-bl-2xl text-[10px] font-black uppercase bg-red-500 text-white";
+                    btn.innerText = "ไม่พบรหัสสินค้า";
+                    btn.className = "flex-[2] py-4 bg-slate-200 text-slate-400 font-black rounded-2xl";
+                    btn.disabled = true;
+                }
+                return;
+            }
+
+            // Existing Item Logic
+            document.getElementById('itemName').innerText = data.name;
+            document.getElementById('itemDetail').innerText = data.desc;
+
+            if (currentRole === 'warehouse') {
+                if (data.status === 'warehouse') {
+                    tag.innerText = "พร้อมส่ง";
+                    tag.className = "absolute top-0 right-0 px-6 py-2 rounded-bl-2xl text-[10px] font-black uppercase bg-blue-500 text-white";
+                    btn.innerText = "เริ่มส่งสินค้า";
+                    btn.onclick = () => updateProduct(code, 'shipping');
+                    btn.disabled = false;
+                } else {
+                    tag.innerText = data.status === 'shipping' ? "กำลังจัดส่ง" : "ส่งสำเร็จแล้ว";
+                    tag.className = "absolute top-0 right-0 px-6 py-2 rounded-bl-2xl text-[10px] font-black uppercase bg-slate-500 text-white";
+                    btn.innerText = "อยู่ระหว่างดำเนินการ";
+                    btn.disabled = true;
+                }
+            } else {
+                if (data.status === 'shipping') {
+                    tag.innerText = "ส่งมาแล้ว";
+                    tag.className = "absolute top-0 right-0 px-6 py-2 rounded-bl-2xl text-[10px] font-black uppercase bg-orange-500 text-white";
+                    btn.innerText = "ยืนยันรับสินค้า";
+                    btn.onclick = () => updateProduct(code, 'delivered');
+                    btn.disabled = false;
+                } else {
+                    tag.innerText = data.status === 'warehouse' ? "คลังยังไม่ส่ง" : "รับเรียบร้อย";
+                    tag.className = "absolute top-0 right-0 px-6 py-2 rounded-bl-2xl text-[10px] font-black uppercase bg-slate-400 text-white";
+                    btn.innerText = "ตรวจสอบสถานะ";
+                    btn.disabled = true;
+                }
+            }
+            window.scrollTo({ top: area.offsetTop - 100, behavior: 'smooth' });
+        }
+
+        function updateProduct(code, newStatus) {
+            items[code].status = newStatus;
+            const time = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+            
+            history.unshift({
+                id: Date.now(),
+                code: code,
+                name: items[code].name,
+                status: newStatus,
+                time: time,
+                role: currentRole === 'warehouse' ? 'Warehouse' : 'Customer'
+            });
+
+            showToast(newStatus === 'shipping' ? "เริ่มจัดส่งแล้ว" : "รับสินค้าสำเร็จ");
+            closeResult();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('historyContainer');
+            const count = document.getElementById('historyCount');
+            if (!container) return;
+            
+            count.innerText = history.length;
+            if (history.length === 0) {
+                container.innerHTML = '<div id="emptyState" class="text-center py-12 bg-white rounded-[2.5rem] border border-dashed border-slate-200"><i data-lucide="package-open" class="w-10 h-10 text-slate-300 mx-auto mb-3"></i><p class="text-xs font-bold text-slate-400 uppercase tracking-widest">ยังไม่มีรายการ</p></div>';
+                if(window.lucide) lucide.createIcons();
+                return;
+            }
+
+            container.innerHTML = history.map(item => `
+                <div class="history-card bg-white p-5 rounded-[1.8rem] border border-slate-200/60 shadow-sm flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl flex items-center justify-center ${item.status === 'shipping' ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}">
+                        <i data-lucide="${item.status === 'shipping' ? 'truck' : 'check-circle-2'}" class="w-6 h-6"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] font-black text-slate-400 uppercase tracking-wider">${item.code}</span>
+                            <span class="status-badge ${item.status === 'shipping' ? 'status-shipping' : 'status-delivered'}">
+                                ${item.status === 'shipping' ? 'กำลังจัดส่ง' : 'จัดส่งสำเร็จ'}
+                            </span>
+                        </div>
+                        <h4 class="text-sm font-bold text-slate-800">${item.name}</h4>
+                        <div class="flex justify-between mt-2 opacity-50">
+                            <span class="text-[9px] font-black uppercase">BY: ${item.role}</span>
+                            <span class="text-[9px] font-bold">${item.time}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            if(window.lucide) lucide.createIcons();
+        }
+
+        function switchMode(mode) {
+            stopCamera();
+            closeResult();
+            const slider = document.getElementById('modeSlider');
+            document.getElementById('modeSlider').style.transform = mode === 'scan' ? 'translateX(0)' : 'translateX(100%)';
+            document.getElementById('scanView').classList.toggle('hidden', mode !== 'scan');
+            document.getElementById('manualView').classList.toggle('hidden', mode !== 'manual');
+        }
+
+        function handleManual() {
+            const input = document.getElementById('manualInput');
+            if (input.value) handleScan(input.value.trim().toUpperCase());
+        }
+
+        function closeResult() {
+            document.getElementById('resultArea').classList.add('hidden');
+            document.getElementById('manualInput').value = '';
+        }
+
+        async function toggleCamera() {
+            if (isCamOpen) { stopCamera(); } 
+            else {
+                scanner = new Html5Qrcode("reader");
+                try {
+                    await scanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, (text) => {
+                        handleScan(text);
+                        stopCamera();
+                    });
+                    isCamOpen = true;
+                    document.getElementById('scanPlaceholder').classList.add('hidden');
+                    document.getElementById('btnToggleCam').innerHTML = '<i data-lucide="camera-off"></i> <span>ปิดกล้อง</span>';
+                    if(window.lucide) lucide.createIcons();
+                } catch (e) { showToast("เปิดกล้องไม่ได้"); }
+            }
+        }
+
+        function stopCamera() {
+            if (scanner && isCamOpen) {
+                scanner.stop();
+                isCamOpen = false;
+                document.getElementById('scanPlaceholder').classList.remove('hidden');
+                document.getElementById('btnToggleCam').innerHTML = '<i data-lucide="camera"></i> <span>เริ่มสแกน QR Code</span>';
+                if(window.lucide) lucide.createIcons();
+            }
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.className = t.className.replace('opacity-0 translate-y-10', 'opacity-100 translate-y-0');
+            setTimeout(() => {
+                t.className = t.className.replace('opacity-100 translate-y-0', 'opacity-0 translate-y-10');
+            }, 2000);
+        }
+
+        function logout() {
+            stopCamera();
+            document.getElementById('loginOverlay').classList.remove('hidden');
+            document.getElementById('app').classList.add('hidden');
+        }
+
+        window.onload = () => { if(window.lucide) lucide.createIcons(); };
+    </script>
+</body>
+</html>
