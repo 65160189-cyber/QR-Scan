@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Warehouse Dispatch System</title>
+    <title>Warehouse Dispatch System (Fix Import Repeat)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- เพิ่ม Library สำหรับ PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&family=Sarabun:wght@300;400;600;700&display=swap');
@@ -79,29 +79,20 @@
         .history-card { animation: slideUp 0.4s ease-out forwards; }
         @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        #stockList::-webkit-scrollbar { width: 4px; }
-        #stockList::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-
-        .import-box-anim {
-            animation: fadeInDown 0.3s ease-out;
-        }
-        @keyframes fadeInDown {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        #manualInput:focus {
+            background: white;
+            border-color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
         }
 
-        .btn-export {
+        .export-group {
+            display: none; 
+        }
+        .export-group.visible {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 0.75rem;
-            border-radius: 1rem;
-            font-size: 11px;
-            font-weight: 700;
-            transition: all 0.2s;
-            flex: 1;
+            animation: fadeIn 0.5s ease-in;
         }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body class="text-slate-900">
@@ -109,12 +100,19 @@
     <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col relative pb-10">
         <header class="p-6 pb-12 rounded-b-[3.5rem] shadow-xl sticky top-0 z-50 bg-gradient-to-br from-blue-600 to-blue-700">
             <div class="flex items-center justify-between text-white">
-                <div>
-                    <span class="text-[10px] font-black uppercase opacity-80 tracking-widest">SENDER: คลังสินค้า</span>
-                    <h1 class="text-2xl font-black tracking-tight">DISPATCH SYSTEM</h1>
+                <div class="flex-1">
+                    <span id="statusIndicator" class="text-[10px] font-black uppercase opacity-80 tracking-widest flex items-center gap-1">
+                        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span> <span data-i18n="storage_active">ระบบบันทึกข้อมูลทำงานอยู่</span>
+                    </span>
+                    <h1 class="text-2xl font-black tracking-tight" data-i18n="app_title">DISPATCH SYSTEM</h1>
                 </div>
+                
+                <button onclick="toggleLanguage()" class="mr-4 w-10 h-10 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all">
+                    <i data-lucide="languages" class="w-5 h-5 text-white"></i>
+                </button>
+
                 <div class="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-md">
-                    <i data-lucide="package-check" class="w-6 h-6"></i>
+                    <i data-lucide="package-check" class="w-6 h-6 text-white"></i>
                 </div>
             </div>
         </header>
@@ -122,309 +120,224 @@
         <main class="p-6 -mt-18 space-y-6">
             <div class="ios-switcher-container shadow-sm">
                 <div id="modeSlider" class="ios-slider"></div>
-                <div onclick="switchMode('scan')" id="tabScan" class="ios-tab text-blue-600"><i data-lucide="scan" class="w-4 h-4"></i> สแกนส่ง</div>
-                <div onclick="switchMode('manual')" id="tabManual" class="ios-tab"><i data-lucide="edit-3" class="w-4 h-4"></i> คีย์รหัส</div>
-                <div onclick="switchMode('import')" id="tabImport" class="ios-tab"><i data-lucide="database" class="w-4 h-4"></i> สต็อกสินค้า</div>
+                <div onclick="switchMode('scan')" id="tabScan" class="ios-tab text-blue-600">
+                    <i data-lucide="scan" class="w-4 h-4"></i> <span data-i18n="tab_scan">สแกนกล้อง</span>
+                </div>
+                <div onclick="switchMode('manual')" id="tabManual" class="ios-tab">
+                    <i data-lucide="edit-3" class="w-4 h-4"></i> <span data-i18n="tab_handheld">เครื่องสแกน</span>
+                </div>
+                <div onclick="switchMode('import')" id="tabImport" class="ios-tab">
+                    <i data-lucide="database" class="w-4 h-4"></i> <span data-i18n="tab_stock">สต็อกสินค้า</span>
+                </div>
             </div>
 
+            <!-- Content Area -->
             <div class="bg-white rounded-[2.5rem] p-5 shadow-sm border border-slate-200 min-h-[300px] flex flex-col relative overflow-hidden">
-                
-                <!-- 1. Scan View -->
+                <!-- SCAN VIEW -->
                 <div id="scanView" class="space-y-5">
                     <div class="aspect-square bg-slate-50 rounded-[2rem] overflow-hidden relative flex items-center justify-center border-2 border-dashed border-slate-200">
                         <div id="reader"></div>
                         <div id="scanPlaceholder" class="absolute text-center opacity-30">
                             <i data-lucide="qr-code" class="w-12 h-12 mx-auto mb-2 text-blue-600"></i>
-                            <p class="text-[10px] font-black uppercase">รอสแกน QR หรือ Barcode</p>
+                            <p class="text-[10px] font-black uppercase" data-i18n="wait_scan">รอสแกนผ่านกล้อง</p>
                         </div>
                     </div>
                     <button id="btnToggleCam" onclick="toggleCamera()" class="btn-main shadow-lg shadow-blue-100">
-                        <i data-lucide="camera"></i> <span>เริ่มสแกนส่งสินค้า</span>
+                        <i data-lucide="camera"></i> <span data-i18n="btn_open_camera">เปิดกล้องสแกน</span>
                     </button>
                 </div>
 
-                <!-- 2. Manual View -->
+                <!-- MANUAL VIEW -->
                 <div id="manualView" class="hidden py-8 text-center flex-1 flex flex-col justify-center">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest">ระบุรหัสสินค้าเพื่อบันทึกส่งสำเร็จ</p>
-                    <input type="text" id="manualInput" placeholder="รหัสสินค้า..." class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-6 px-6 focus:border-blue-500 outline-none text-center text-3xl font-black uppercase mb-6 transition-all">
+                    <p class="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest" data-i18n="handheld_mode">HANDHELD MODE</p>
+                    <p class="text-xs font-bold text-slate-400 mb-6" data-i18n="handheld_desc">สแกนที่ตัวเครื่องเพื่อบันทึกรายการ</p>
+                    <input type="text" id="manualInput" placeholder="..." autocomplete="off" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-6 px-6 outline-none text-center text-3xl font-black uppercase mb-6 transition-all">
                     <button onclick="handleManual()" class="btn-main shadow-lg shadow-blue-100">
-                        <i data-lucide="check-circle-2"></i> บันทึกส่งสำเร็จ
+                        <i data-lucide="check-circle-2"></i> <span data-i18n="btn_confirm">ยืนยันรหัส</span>
                     </button>
                 </div>
 
-                <!-- 3. Stock/Import View -->
+                <!-- STOCK / IMPORT VIEW -->
                 <div id="importView" class="hidden py-2 space-y-4">
                     <div class="flex justify-between items-center px-1">
-                        <h3 class="font-black text-slate-800 text-sm">รายการสต็อกปัจจุบัน</h3>
+                        <h3 class="font-black text-slate-800 text-sm" data-i18n="current_stock">รายการสต็อกปัจจุบัน</h3>
                         <label class="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black cursor-pointer shadow-md active:scale-95 transition-all">
-                            <i data-lucide="file-up" class="inline w-3 h-3 mr-1"></i> นำเข้าข้อมูล
+                            <i data-lucide="file-up" class="inline w-3 h-3 mr-1"></i> <span data-i18n="btn_import">นำเข้า Excel</span>
                             <input type="file" id="excelInput" accept=".xlsx, .xls" class="hidden" onchange="handleExcelFile(event)">
                         </label>
                     </div>
 
-                    <div id="importPreview" class="hidden bg-blue-50 border border-blue-200 rounded-2xl p-3 space-y-2 import-box-anim">
+                    <!-- Import Confirmation Box -->
+                    <div id="importPreview" class="hidden bg-blue-50 border border-blue-200 rounded-2xl p-3 space-y-2">
                         <div class="flex justify-between items-center">
-                            <span class="text-[9px] font-black text-blue-700 uppercase tracking-wider">ตรวจสอบข้อมูลก่อนอัปเดต</span>
+                            <span class="text-[9px] font-black text-blue-700 uppercase tracking-wider" data-i18n="preview_title">พบข้อมูลใหม่</span>
                             <div class="flex gap-2">
-                                <button onclick="cancelImport()" class="text-slate-400 text-[8px] font-bold uppercase">ยกเลิก</button>
-                                <button onclick="confirmImport()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black shadow-sm">ยืนยัน</button>
+                                <button onclick="cancelImport()" class="text-slate-400 text-[8px] font-bold uppercase" data-i18n="btn_cancel">ยกเลิก</button>
+                                <button onclick="confirmImport()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black shadow-sm" data-i18n="btn_confirm">ยืนยัน</button>
                             </div>
                         </div>
-                        <div id="previewList" class="max-h-[120px] overflow-y-auto text-[10px] font-bold text-blue-900 space-y-1 divide-y divide-blue-100"></div>
+                        <div id="previewList" class="max-h-[120px] overflow-y-auto text-[10px] font-bold text-blue-900 space-y-1"></div>
                     </div>
 
                     <div id="stockList" class="max-h-[300px] overflow-y-auto space-y-2 pr-1"></div>
                 </div>
             </div>
 
-            <!-- History Section -->
+            <!-- HISTORY AREA -->
             <div class="space-y-4">
                 <div class="flex items-center justify-between px-2">
                     <h2 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
-                        <i data-lucide="history" class="w-4 h-4 text-blue-500"></i> บันทึกส่งสำเร็จวันนี้
+                        <i data-lucide="history" class="w-4 h-4 text-blue-500"></i> <span data-i18n="history_title">บันทึกส่งวันนี้</span>
                     </h2>
-                    <button onclick="clearHistory()" class="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">ล้างประวัติ</button>
+                    
+                    <div id="exportBtnGroup" class="export-group gap-2">
+                        <button onclick="exportExcel()" class="w-8 h-8 flex items-center justify-center bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors shadow-sm" title="Export Excel">
+                            <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="exportPDF()" class="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors shadow-sm" title="Export PDF">
+                            <i data-lucide="file-text" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="clearHistory()" class="ml-2 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500" data-i18n="btn_clear_history">ล้างประวัติ</button>
+                    </div>
                 </div>
-                
                 <div id="historyContainer" class="space-y-3"></div>
-
-                <!-- Export Buttons -->
-                <div id="exportSection" class="hidden flex gap-3 pt-2">
-                    <button onclick="exportToExcel()" class="btn-export bg-green-50 text-green-700 border border-green-200 hover:bg-green-100">
-                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel Report
-                    </button>
-                    <button onclick="exportToPDF()" class="btn-export bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">
-                        <i data-lucide="file-text" class="w-4 h-4"></i> PDF Report
-                    </button>
-                </div>
             </div>
         </main>
     </div>
 
-    <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-3xl text-xs font-bold shadow-2xl opacity-0 translate-y-10 transition-all duration-300 z-[200] pointer-events-none">
         สำเร็จ
     </div>
 
     <script>
-        // --- App State ---
-        let inventory = {}; 
-        let history = [];
-        let scanner = null;
-        let isCamOpen = false;
-        let pendingImportData = [];
+        // --- Globals ---
         let toastTimeout = null;
+        let pendingImportData = [];
+        let currentLang = localStorage.getItem('appLang') || 'th';
+        let scannerObj = null;
+        let isCamOpen = false;
 
-        // --- Excel Logic ---
-        function handleExcelFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-                    if (jsonData.length < 2) {
-                        showToast("❌ ไม่พบข้อมูลในไฟล์");
-                        return;
-                    }
-
-                    const headers = jsonData[0].map(h => h ? h.toString().toLowerCase().trim() : "");
-                    const colIdx = {
-                        code: headers.findIndex(h => h.includes('รหัส') || h.includes('code') || h.includes('id')),
-                        name: headers.findIndex(h => h.includes('รายการ') || h.includes('name') || h.includes('ชื่อ')),
-                        qty: headers.findIndex(h => h.includes('จำนวน') || h.includes('qty') || h.includes('คงเหลือ') || h.includes('stock'))
-                    };
-
-                    if (colIdx.code === -1 || colIdx.name === -1) {
-                        showToast("❌ รูปแบบไฟล์ไม่ถูกต้อง");
-                        return;
-                    }
-
-                    pendingImportData = [];
-                    for (let i = 1; i < jsonData.length; i++) {
-                        const row = jsonData[i];
-                        if (!row[colIdx.code]) continue;
-
-                        pendingImportData.push({
-                            code: row[colIdx.code].toString().toUpperCase().trim(),
-                            name: row[colIdx.name] ? row[colIdx.name].toString() : "ไม่ได้ระบุชื่อ",
-                            qty: colIdx.qty !== -1 ? parseInt(row[colIdx.qty] || 0) : 0
-                        });
-                    }
-
-                    showImportPreview();
-                } catch (err) {
-                    showToast("❌ เกิดข้อผิดพลาดในการอ่านไฟล์");
-                }
-                event.target.value = '';
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function showImportPreview() {
-            const preview = document.getElementById('importPreview');
-            const list = document.getElementById('previewList');
-            preview.classList.remove('hidden');
-            list.innerHTML = pendingImportData.map(item => `
-                <div class="flex justify-between items-center py-2">
-                    <div class="flex flex-col">
-                        <span class="text-[7px] text-blue-600 uppercase font-black">${item.code}</span>
-                        <span class="truncate max-w-[150px]">${item.name}</span>
-                    </div>
-                    <span class="font-black text-blue-600">+${item.qty}</span>
-                </div>
-            `).join('');
-        }
-
-        function cancelImport() {
-            document.getElementById('importPreview').classList.add('hidden');
-            pendingImportData = [];
-        }
-
-        function confirmImport() {
-            pendingImportData.forEach(item => {
-                if (inventory[item.code]) {
-                    inventory[item.code].qty += item.qty;
-                } else {
-                    inventory[item.code] = { name: item.name, qty: item.qty };
-                }
-            });
-            document.getElementById('importPreview').classList.add('hidden');
-            showToast(`✅ นำเข้าข้อมูลสำเร็จ ${pendingImportData.length} รายการ`);
-            updateStockUI();
-            pendingImportData = [];
-        }
-
-        function updateStockUI() {
-            const container = document.getElementById('stockList');
-            const entries = Object.entries(inventory);
-            
-            if (entries.length === 0) {
-                container.innerHTML = `<div class="text-center py-12 text-[10px] font-black text-slate-300 uppercase tracking-widest">ยังไม่มีข้อมูลในสต็อก<br>กรุณานำเข้าข้อมูลไฟล์ Excel</div>`;
-                return;
+        const translations = {
+            th: {
+                storage_active: "ระบบบันทึกข้อมูลทำงานอยู่",
+                app_title: "ระบบส่งสินค้า",
+                tab_scan: "สแกนกล้อง",
+                tab_handheld: "เครื่องสแกน",
+                tab_stock: "สต็อกสินค้า",
+                wait_scan: "รอสแกนผ่านกล้อง",
+                btn_open_camera: "เปิดกล้องสแกน",
+                btn_close_camera: "ปิดกล้อง",
+                handheld_mode: "โหมดสแกนเนอร์",
+                handheld_desc: "สแกนที่ตัวเครื่องเพื่อบันทึกรายการ",
+                btn_confirm: "ยืนยันรหัส",
+                current_stock: "รายการสต็อกปัจจุบัน",
+                btn_import: "นำเข้า Excel",
+                preview_title: "พบข้อมูลใหม่",
+                btn_cancel: "ยกเลิก",
+                history_title: "บันทึกส่งวันนี้",
+                btn_clear_history: "ล้างประวัติ",
+                success_dispatch: "✅ ส่งสินค้าสำเร็จ",
+                err_not_found: "❌ ไม่พบรหัสสินค้านี้",
+                err_out_stock: "⚠️ สินค้าหมดสต็อก"
+            },
+            en: {
+                storage_active: "Storage Active",
+                app_title: "DISPATCH SYSTEM",
+                tab_scan: "Camera Scan",
+                tab_handheld: "Handheld",
+                tab_stock: "Stock List",
+                wait_scan: "Wait for Camera",
+                btn_open_camera: "Open Camera",
+                btn_close_camera: "Close Camera",
+                handheld_mode: "HANDHELD MODE",
+                handheld_desc: "Use device scanner to record",
+                btn_confirm: "Confirm Code",
+                current_stock: "Current Stock",
+                btn_import: "Import Excel",
+                preview_title: "Preview Data",
+                btn_cancel: "Cancel",
+                history_title: "Recent Logs",
+                btn_clear_history: "Clear",
+                success_dispatch: "✅ Dispatch Success",
+                err_not_found: "❌ Product Not Found",
+                err_out_stock: "⚠️ Out of Stock"
             }
+        };
 
-            container.innerHTML = entries.map(([code, data]) => `
-                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm transition-all hover:bg-blue-50/30">
-                    <div class="min-w-0 pr-2">
-                        <span class="text-[8px] font-black text-blue-500 uppercase tracking-tighter">${code}</span>
-                        <h4 class="text-xs font-bold text-slate-800 truncate">${data.name}</h4>
-                    </div>
-                    <div class="text-right flex flex-col items-end">
-                        <span class="text-[8px] font-black text-slate-400 uppercase">คงเหลือ</span>
-                        <span class="text-sm font-black ${data.qty <= 0 ? 'text-red-500' : 'text-slate-900'}">${data.qty}</span>
-                    </div>
-                </div>
-            `).join('');
-            lucide.createIcons();
+        const db = new Dexie("WarehouseDB");
+        db.version(1).stores({
+            inventory: 'code, name, qty',
+            history: '++id, code, name, time, date'
+        });
+
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playBeep(success = true) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if (success) {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else {
+                osc.type = 'square'; osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            if (toastTimeout) clearTimeout(toastTimeout);
+            t.innerText = msg;
+            t.classList.replace('opacity-0', 'opacity-100');
+            t.classList.replace('translate-y-10', 'translate-y-0');
+            toastTimeout = setTimeout(() => {
+                t.classList.replace('opacity-100', 'opacity-0');
+                t.classList.replace('translate-y-0', 'translate-y-10');
+            }, 2000);
+        }
+
+        function updateUI() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[currentLang][key]) el.innerText = translations[currentLang][key];
+            });
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'th' ? 'en' : 'th';
+            localStorage.setItem('appLang', currentLang);
+            updateUI(); updateStockUI(); renderHistory();
+            showToast(currentLang === 'th' ? "เปลี่ยนภาษาสำเร็จ" : "Language Switched");
+        }
+
+        const manualInput = document.getElementById('manualInput');
+        manualInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleManual(); });
+        document.body.addEventListener('click', () => {
+            if (!document.getElementById('manualView').classList.contains('hidden')) manualInput.focus();
+        });
+
+        async function processAction(code) {
+            const product = await db.inventory.get(code);
+            if (!product) { playBeep(false); showToast(translations[currentLang].err_not_found); return; }
+            if (product.qty <= 0) { playBeep(false); showToast(translations[currentLang].err_out_stock); return; }
+
+            await db.transaction('rw', db.inventory, db.history, async () => {
+                await db.inventory.update(code, { qty: product.qty - 1 });
+                await db.history.add({
+                    code: code, name: product.name,
+                    time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+                    date: new Date().toLocaleDateString('th-TH')
+                });
+            });
+            playBeep(true); showToast(`${translations[currentLang].success_dispatch}: ${code}`);
+            updateStockUI(); renderHistory();
         }
 
         function handleManual() {
-            const input = document.getElementById('manualInput');
-            const code = input.value.trim().toUpperCase();
-            if (code) processAction(code);
-        }
-
-        function processAction(code) {
-            const data = inventory[code];
-            if (!data) {
-                showToast("❌ ไม่พบรหัสสินค้านี้ในคลัง");
-                return;
-            }
-            if (data.qty <= 0) {
-                showToast("⚠️ สินค้าหมดสต็อก");
-                return;
-            }
-
-            inventory[code].qty -= 1;
-            addHistory(code, data.name);
-            showToast(`✅ บันทึกส่งสำเร็จ: ${code}`);
-            updateStockUI();
-            renderHistory();
-            document.getElementById('manualInput').value = "";
-        }
-
-        function addHistory(code, name) {
-            history.unshift({
-                code, name,
-                time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
-                date: new Date().toLocaleDateString('th-TH')
-            });
-            document.getElementById('exportSection').classList.remove('hidden');
-        }
-
-        function renderHistory() {
-            const container = document.getElementById('historyContainer');
-            if (history.length === 0) {
-                container.innerHTML = `<div class="text-center py-8 opacity-20 text-[10px] font-black uppercase">ยังไม่มีรายการส่งสำเร็จ</div>`;
-                document.getElementById('exportSection').classList.add('hidden');
-                return;
-            }
-            container.innerHTML = history.slice(0, 10).map(item => `
-                <div class="history-card bg-white p-4 rounded-3xl border border-slate-200/60 shadow-sm flex items-center gap-4">
-                    <div class="w-10 h-10 rounded-2xl flex items-center justify-center bg-blue-50 text-blue-600">
-                        <i data-lucide="check" class="w-5 h-5"></i>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="flex justify-between items-start">
-                            <span class="text-[8px] font-black text-slate-400 uppercase tracking-tighter">${item.code}</span>
-                            <span class="text-[8px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase">ส่งสำเร็จ</span>
-                        </div>
-                        <h4 class="text-xs font-bold text-slate-800 truncate">${item.name}</h4>
-                        <span class="text-[8px] font-bold text-slate-300">เวลา: ${item.time} น.</span>
-                    </div>
-                </div>
-            `).join('');
-            lucide.createIcons();
-        }
-
-        // --- Export Functions ---
-        function exportToExcel() {
-            if (history.length === 0) return;
-            const data = history.map(h => ({
-                "วันที่": h.date,
-                "เวลา": h.time,
-                "รหัสสินค้า": h.code,
-                "ชื่อสินค้า": h.name,
-                "สถานะ": "ส่งสำเร็จ"
-            }));
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Dispatch_History");
-            const fileName = `Dispatch_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
-            XLSX.writeFile(wb, fileName);
-            showToast("📊 ดาวน์โหลด Excel สำเร็จ");
-        }
-
-        function exportToPDF() {
-            if (history.length === 0) return;
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            
-            // หมายเหตุ: PDF พื้นฐานอาจไม่รองรับภาษาไทยถ้าไม่โหลดฟอนต์เพิ่ม 
-            // ในที่นี้จะใช้ตารางมาตรฐานและแสดงข้อมูลภาษาอังกฤษ/ตัวเลขเป็นหลัก
-            doc.setFontSize(18);
-            doc.text("Warehouse Dispatch Report", 14, 22);
-            doc.setFontSize(11);
-            doc.text(`Generated on: ${new Date().toLocaleString('th-TH')}`, 14, 30);
-
-            const tableData = history.map(h => [h.date, h.time, h.code, h.name, "Success"]);
-            
-            doc.autoTable({
-                startY: 40,
-                head: [['Date', 'Time', 'Product Code', 'Item Name', 'Status']],
-                body: tableData,
-                theme: 'striped',
-                headStyles: { fillColor: [37, 99, 235] }
-            });
-
-            doc.save(`Dispatch_Report_${new Date().toISOString().split('T')[0]}.pdf`);
-            showToast("📄 ดาวน์โหลด PDF สำเร็จ");
+            const code = manualInput.value.trim().toUpperCase();
+            if (code) { processAction(code); manualInput.value = ""; manualInput.focus(); }
         }
 
         function switchMode(mode) {
@@ -432,81 +345,205 @@
             const slider = document.getElementById('modeSlider');
             const pos = { scan: 0, manual: 1, import: 2 };
             slider.style.transform = `translateX(${pos[mode] * 100}%)`;
-            
-            const tabs = [document.getElementById('tabScan'), document.getElementById('tabManual'), document.getElementById('tabImport')];
-            tabs.forEach(t => t.classList.remove('text-blue-600'));
-            
-            if(mode === 'scan') tabs[0].classList.add('text-blue-600');
-            else if(mode === 'manual') tabs[1].classList.add('text-blue-600');
-            else if(mode === 'import') tabs[2].classList.add('text-blue-600');
-
+            document.querySelectorAll('.ios-tab').forEach(t => t.classList.remove('text-blue-600'));
+            const tabs = ['tabScan', 'tabManual', 'tabImport'];
+            document.getElementById(tabs[pos[mode]]).classList.add('text-blue-600');
             document.getElementById('scanView').classList.toggle('hidden', mode !== 'scan');
             document.getElementById('manualView').classList.toggle('hidden', mode !== 'manual');
             document.getElementById('importView').classList.toggle('hidden', mode !== 'import');
+            if(mode === 'manual') setTimeout(() => manualInput.focus(), 400);
+        }
+
+        async function updateStockUI() {
+            const container = document.getElementById('stockList');
+            const items = await db.inventory.toArray();
+            if (items.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 opacity-30 text-[10px] font-black uppercase">ยังไม่มีสต็อก</div>`;
+                return;
+            }
+            container.innerHTML = items.map(item => `
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div class="min-w-0 pr-2">
+                        <span class="text-[8px] font-black text-blue-500 uppercase">${item.code}</span>
+                        <h4 class="text-xs font-bold text-slate-800 truncate">${item.name}</h4>
+                    </div>
+                    <div class="text-right"><span class="text-sm font-black ${item.qty <= 0 ? 'text-red-500' : 'text-slate-900'}">${item.qty}</span></div>
+                </div>
+            `).join('');
+        }
+
+        async function exportExcel() {
+            const logs = await db.history.toArray();
+            if (logs.length === 0) { showToast("ไม่มีข้อมูลสำหรับส่งออก"); return; }
+            const data = logs.map(l => ({ "รหัสสินค้า": l.code, "ชื่อสินค้า": l.name, "วันที่": l.date, "เวลา": l.time }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Dispatch_History");
+            XLSX.writeFile(wb, `Dispatch_History_${new Date().toISOString().slice(0,10)}.xlsx`);
+            showToast("Export Excel สำเร็จ");
+        }
+
+        async function exportPDF() {
+            const { jsPDF } = window.jspdf;
+            const logs = await db.history.toArray();
+            if (logs.length === 0) { showToast("ไม่มีข้อมูลสำหรับส่งออก"); return; }
+            const doc = new jsPDF();
+            doc.text("Daily Dispatch Report", 14, 15);
+            const tableBody = logs.map(l => [l.code, l.name, l.date, l.time]);
+            doc.autoTable({ head: [['Code', 'Name', 'Date', 'Time']], body: tableBody, startY: 20 });
+            doc.save(`Dispatch_Report_${new Date().toISOString().slice(0,10)}.pdf`);
+            showToast("Export PDF สำเร็จ");
+        }
+
+        function handleExcelFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { header: 1 });
+                
+                if (jsonData.length < 1) { 
+                    showToast("ไฟล์ไม่มีข้อมูล"); 
+                    event.target.value = ""; // Clear input
+                    return; 
+                }
+
+                let headerRowIndex = -1;
+                let cIdx = -1, nIdx = -1, qIdx = -1;
+
+                const codeKeywords = ['code', 'รหัส', 'barcode', 'sku', 'id', 'รหัสสินค้า'];
+                const nameKeywords = ['name', 'ชื่อ', 'รายการ', 'item', 'product', 'ชื่อสินค้า'];
+                const qtyKeywords = ['qty', 'จำนวน', 'สต็อก', 'คงเหลือ', 'stock', 'amount'];
+
+                for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
+                    const row = jsonData[i].map(cell => cell?.toString().toLowerCase().trim() || "");
+                    
+                    cIdx = row.findIndex(val => codeKeywords.some(k => val.includes(k)));
+                    nIdx = row.findIndex(val => nameKeywords.some(k => val.includes(k)));
+                    qIdx = row.findIndex(val => qtyKeywords.some(k => val.includes(k)));
+
+                    if (cIdx !== -1) {
+                        headerRowIndex = i;
+                        break;
+                    }
+                }
+
+                if (headerRowIndex === -1) {
+                    const confirmDefault = confirm("ไม่พบหัวตาราง (รหัส, ชื่อ, จำนวน) ต้องการนำเข้าโดยใช้คอลัมน์เริ่มต้น (A, B, C) หรือไม่?");
+                    if (!confirmDefault) { 
+                        event.target.value = ""; 
+                        return; 
+                    }
+                    headerRowIndex = 0;
+                    cIdx = 0; nIdx = 1; qIdx = 2;
+                } else {
+                    headerRowIndex += 1;
+                }
+
+                pendingImportData = jsonData.slice(headerRowIndex)
+                    .filter(row => row[cIdx])
+                    .map(row => ({
+                        code: row[cIdx].toString().toUpperCase().trim(),
+                        name: row[nIdx]?.toString().trim() || "No Name",
+                        qty: parseInt(row[qIdx]) || 0
+                    }));
+
+                if (pendingImportData.length > 0) {
+                    document.getElementById('importPreview').classList.remove('hidden');
+                    document.getElementById('previewList').innerHTML = pendingImportData.slice(0, 5).map(i => 
+                        `<div class='flex justify-between py-1 border-b border-blue-100'>
+                            <span class="truncate pr-2">${i.code} - ${i.name}</span>
+                            <span class="font-bold text-blue-600">+${i.qty}</span>
+                        </div>`
+                    ).join('');
+                } else { 
+                    showToast("ไม่พบข้อมูลสินค้าที่นำเข้าได้"); 
+                    event.target.value = ""; // Clear input
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function confirmImport() {
+            if (pendingImportData.length === 0) return;
+            for(const item of pendingImportData) {
+                const ex = await db.inventory.get(item.code);
+                if(ex) await db.inventory.update(item.code, { qty: ex.qty + item.qty });
+                else await db.inventory.add(item);
+            }
+            pendingImportData = [];
+            document.getElementById('importPreview').classList.add('hidden');
+            document.getElementById('excelInput').value = ""; // Clear input for next time
+            updateStockUI(); 
+            showToast("นำเข้าข้อมูลสำเร็จ");
+        }
+
+        function cancelImport() { 
+            pendingImportData = []; 
+            document.getElementById('importPreview').classList.add('hidden'); 
+            document.getElementById('excelInput').value = ""; // Clear input for next time
+        }
+
+        async function renderHistory() {
+            const container = document.getElementById('historyContainer');
+            const exportBtn = document.getElementById('exportBtnGroup');
+            const data = await db.history.reverse().limit(10).toArray();
+            
+            if (data.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 opacity-20 text-[10px] font-black uppercase">ยังไม่มีรายการส่ง</div>`;
+                exportBtn.classList.remove('visible'); 
+                return;
+            } else {
+                exportBtn.classList.add('visible'); 
+            }
+
+            container.innerHTML = data.map(item => `
+                <div class="history-card bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-2xl flex items-center justify-center bg-blue-50 text-blue-600"><i data-lucide="check" class="w-5 h-5"></i></div>
+                    <div class="flex-1 min-w-0">
+                        <span class="text-[8px] font-black text-slate-400 uppercase">${item.code}</span>
+                        <h4 class="text-xs font-bold text-slate-800 truncate">${item.name}</h4>
+                        <span class="text-[8px] font-bold text-slate-300">${item.time}</span>
+                    </div>
+                </div>
+            `).join('');
+            lucide.createIcons();
         }
 
         async function toggleCamera() {
             if (isCamOpen) stopCamera();
             else {
-                scanner = new Html5Qrcode("reader");
-                const config = { 
-                    fps: 20, 
-                    qrbox: { width: 250, height: 150 },
-                    aspectRatio: 1.0
-                };
-                
+                scannerObj = new Html5Qrcode("reader");
                 try {
-                    await scanner.start(
-                        { facingMode: "environment" }, 
-                        config, 
-                        (text) => { 
-                            processAction(text.toUpperCase().trim()); 
-                            stopCamera(); 
-                        }
-                    );
+                    await scannerObj.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, (text) => { processAction(text.toUpperCase()); stopCamera(); });
                     isCamOpen = true;
                     document.getElementById('scanPlaceholder').classList.add('hidden');
-                    document.getElementById('btnToggleCam').innerHTML = '<i data-lucide="camera-off"></i> <span>ปิดกล้อง</span>';
-                    document.getElementById('btnToggleCam').classList.replace('bg-blue-600', 'bg-slate-800');
+                    document.getElementById('btnToggleCam').innerHTML = `<i data-lucide="camera-off"></i> <span>${translations[currentLang].btn_close_camera}</span>`;
                     lucide.createIcons();
-                } catch (e) { showToast("❌ ไม่สามารถเข้าถึงกล้องได้"); }
+                } catch (e) { showToast("Error Camera"); }
             }
         }
 
         function stopCamera() {
-            if (scanner && isCamOpen) {
-                scanner.stop(); isCamOpen = false;
-                document.getElementById('scanPlaceholder').classList.remove('remove');
-                document.getElementById('btnToggleCam').innerHTML = '<i data-lucide="camera"></i> <span>เริ่มสแกนส่งสินค้า</span>';
-                document.getElementById('btnToggleCam').classList.replace('bg-slate-800', 'bg-blue-600');
+            if (scannerObj && isCamOpen) {
+                scannerObj.stop(); isCamOpen = false;
+                document.getElementById('scanPlaceholder').classList.remove('hidden');
+                document.getElementById('btnToggleCam').innerHTML = `<i data-lucide="camera"></i> <span>${translations[currentLang].btn_open_camera}</span>`;
                 lucide.createIcons();
             }
         }
 
-        function showToast(msg) {
-            const t = document.getElementById('toast');
-            if (toastTimeout) clearTimeout(toastTimeout);
-            
-            t.innerText = msg; 
-            t.classList.remove('opacity-0', 'translate-y-10'); 
-            t.classList.add('opacity-100', 'translate-y-0');
-            
-            toastTimeout = setTimeout(() => { 
-                t.classList.add('opacity-0', 'translate-y-10'); 
-                t.classList.remove('opacity-100', 'translate-y-0');
-            }, 2000);
+        async function clearHistory() { 
+            if(confirm("ต้องการล้างประวัติการส่งวันนี้ใช่หรือไม่?")) { 
+                await db.history.clear(); 
+                renderHistory(); 
+                showToast("ล้างประวัติสำเร็จ");
+            } 
         }
 
-        function clearHistory() { 
-            history = []; 
-            renderHistory(); 
-            document.getElementById('exportSection').classList.add('hidden');
-        }
-
-        window.onload = () => { 
-            lucide.createIcons(); 
-            updateStockUI();
-        };
+        window.onload = () => { lucide.createIcons(); updateUI(); updateStockUI(); renderHistory(); };
     </script>
 </body>
 </html>
