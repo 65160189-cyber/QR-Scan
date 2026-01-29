@@ -8,6 +8,9 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- เพิ่ม Library สำหรับ PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&family=Sarabun:wght@300;400;600;700&display=swap');
@@ -86,6 +89,19 @@
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        .btn-export {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 0.75rem;
+            border-radius: 1rem;
+            font-size: 11px;
+            font-weight: 700;
+            transition: all 0.2s;
+            flex: 1;
+        }
     </style>
 </head>
 <body class="text-slate-900">
@@ -119,7 +135,7 @@
                         <div id="reader"></div>
                         <div id="scanPlaceholder" class="absolute text-center opacity-30">
                             <i data-lucide="qr-code" class="w-12 h-12 mx-auto mb-2 text-blue-600"></i>
-                            <p class="text-[10px] font-black uppercase">รอสแกนเพื่อยืนยันส่งสำเร็จ</p>
+                            <p class="text-[10px] font-black uppercase">รอสแกน QR หรือ Barcode</p>
                         </div>
                     </div>
                     <button id="btnToggleCam" onclick="toggleCamera()" class="btn-main shadow-lg shadow-blue-100">
@@ -161,7 +177,7 @@
                 </div>
             </div>
 
-            <!-- History -->
+            <!-- History Section -->
             <div class="space-y-4">
                 <div class="flex items-center justify-between px-2">
                     <h2 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
@@ -169,7 +185,18 @@
                     </h2>
                     <button onclick="clearHistory()" class="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">ล้างประวัติ</button>
                 </div>
+                
                 <div id="historyContainer" class="space-y-3"></div>
+
+                <!-- Export Buttons -->
+                <div id="exportSection" class="hidden flex gap-3 pt-2">
+                    <button onclick="exportToExcel()" class="btn-export bg-green-50 text-green-700 border border-green-200 hover:bg-green-100">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel Report
+                    </button>
+                    <button onclick="exportToPDF()" class="btn-export bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> PDF Report
+                    </button>
+                </div>
             </div>
         </main>
     </div>
@@ -181,7 +208,7 @@
 
     <script>
         // --- App State ---
-        let inventory = {}; // เริ่มต้นด้วยคลังสินค้าว่างเปล่า
+        let inventory = {}; 
         let history = [];
         let scanner = null;
         let isCamOpen = false;
@@ -325,17 +352,20 @@
         function addHistory(code, name) {
             history.unshift({
                 code, name,
-                time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+                time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+                date: new Date().toLocaleDateString('th-TH')
             });
+            document.getElementById('exportSection').classList.remove('hidden');
         }
 
         function renderHistory() {
             const container = document.getElementById('historyContainer');
             if (history.length === 0) {
                 container.innerHTML = `<div class="text-center py-8 opacity-20 text-[10px] font-black uppercase">ยังไม่มีรายการส่งสำเร็จ</div>`;
+                document.getElementById('exportSection').classList.add('hidden');
                 return;
             }
-            container.innerHTML = history.slice(0, 5).map(item => `
+            container.innerHTML = history.slice(0, 10).map(item => `
                 <div class="history-card bg-white p-4 rounded-3xl border border-slate-200/60 shadow-sm flex items-center gap-4">
                     <div class="w-10 h-10 rounded-2xl flex items-center justify-center bg-blue-50 text-blue-600">
                         <i data-lucide="check" class="w-5 h-5"></i>
@@ -351,6 +381,50 @@
                 </div>
             `).join('');
             lucide.createIcons();
+        }
+
+        // --- Export Functions ---
+        function exportToExcel() {
+            if (history.length === 0) return;
+            const data = history.map(h => ({
+                "วันที่": h.date,
+                "เวลา": h.time,
+                "รหัสสินค้า": h.code,
+                "ชื่อสินค้า": h.name,
+                "สถานะ": "ส่งสำเร็จ"
+            }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Dispatch_History");
+            const fileName = `Dispatch_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            showToast("📊 ดาวน์โหลด Excel สำเร็จ");
+        }
+
+        function exportToPDF() {
+            if (history.length === 0) return;
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // หมายเหตุ: PDF พื้นฐานอาจไม่รองรับภาษาไทยถ้าไม่โหลดฟอนต์เพิ่ม 
+            // ในที่นี้จะใช้ตารางมาตรฐานและแสดงข้อมูลภาษาอังกฤษ/ตัวเลขเป็นหลัก
+            doc.setFontSize(18);
+            doc.text("Warehouse Dispatch Report", 14, 22);
+            doc.setFontSize(11);
+            doc.text(`Generated on: ${new Date().toLocaleString('th-TH')}`, 14, 30);
+
+            const tableData = history.map(h => [h.date, h.time, h.code, h.name, "Success"]);
+            
+            doc.autoTable({
+                startY: 40,
+                head: [['Date', 'Time', 'Product Code', 'Item Name', 'Status']],
+                body: tableData,
+                theme: 'striped',
+                headStyles: { fillColor: [37, 99, 235] }
+            });
+
+            doc.save(`Dispatch_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+            showToast("📄 ดาวน์โหลด PDF สำเร็จ");
         }
 
         function switchMode(mode) {
@@ -375,11 +449,21 @@
             if (isCamOpen) stopCamera();
             else {
                 scanner = new Html5Qrcode("reader");
+                const config = { 
+                    fps: 20, 
+                    qrbox: { width: 250, height: 150 },
+                    aspectRatio: 1.0
+                };
+                
                 try {
-                    await scanner.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (text) => { 
-                        processAction(text.toUpperCase().trim()); 
-                        stopCamera(); 
-                    });
+                    await scanner.start(
+                        { facingMode: "environment" }, 
+                        config, 
+                        (text) => { 
+                            processAction(text.toUpperCase().trim()); 
+                            stopCamera(); 
+                        }
+                    );
                     isCamOpen = true;
                     document.getElementById('scanPlaceholder').classList.add('hidden');
                     document.getElementById('btnToggleCam').innerHTML = '<i data-lucide="camera-off"></i> <span>ปิดกล้อง</span>';
@@ -392,7 +476,7 @@
         function stopCamera() {
             if (scanner && isCamOpen) {
                 scanner.stop(); isCamOpen = false;
-                document.getElementById('scanPlaceholder').classList.remove('hidden');
+                document.getElementById('scanPlaceholder').classList.remove('remove');
                 document.getElementById('btnToggleCam').innerHTML = '<i data-lucide="camera"></i> <span>เริ่มสแกนส่งสินค้า</span>';
                 document.getElementById('btnToggleCam').classList.replace('bg-slate-800', 'bg-blue-600');
                 lucide.createIcons();
@@ -413,7 +497,12 @@
             }, 2000);
         }
 
-        function clearHistory() { history = []; renderHistory(); }
+        function clearHistory() { 
+            history = []; 
+            renderHistory(); 
+            document.getElementById('exportSection').classList.add('hidden');
+        }
+
         window.onload = () => { 
             lucide.createIcons(); 
             updateStockUI();
