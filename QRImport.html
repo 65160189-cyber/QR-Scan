@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QR Kanban - Inventory & Receipt System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&family=Sarabun:wght@300;400;600;700&display=swap');
+        
+        body { 
+            font-family: 'Plus Jakarta Sans', 'Sarabun', sans-serif; 
+            background: #f1f5f9; 
+            overscroll-behavior: none;
+        }
+
+        .ios-switcher-container { 
+            position: relative; 
+            background: #e2e8f0; 
+            padding: 4px; 
+            border-radius: 18px; 
+            display: flex; 
+            width: 100%; 
+            isolation: isolate; 
+        }
+        .ios-slider { 
+            position: absolute; 
+            top: 4px; 
+            bottom: 4px; 
+            left: 4px; 
+            width: calc(33.33% - 4px); 
+            background: white; 
+            border-radius: 14px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08); 
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); 
+            z-index: 0; 
+        }
+        .ios-tab { 
+            position: relative; 
+            z-index: 1; 
+            flex: 1; 
+            padding: 12px 0; 
+            font-size: 11px; 
+            font-weight: 700; 
+            text-align: center; 
+            color: #64748b; 
+            display: flex; 
+            flex-direction: column;
+            align-items: center; 
+            gap: 4px; 
+            cursor: pointer; 
+        }
+        
+        .btn-main { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 12px; 
+            padding: 1.1rem; 
+            border-radius: 1.5rem; 
+            font-weight: 800; 
+            transition: all 0.3s; 
+            width: 100%; 
+        }
+        .btn-main:active { transform: scale(0.96); }
+        .btn-warehouse { background: #4f46e5; color: white; }
+        .btn-customer { background: #ea580c; color: white; }
+        
+        #reader { width: 100% !important; border: none !important; border-radius: 1.5rem; overflow: hidden; }
+        
+        .history-card { animation: slideUp 0.4s ease-out forwards; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .receipt-dashed {
+            background-image: linear-gradient(to right, #e2e8f0 50%, transparent 50%);
+            background-position: bottom;
+            background-size: 10px 1px;
+            background-repeat: repeat-x;
+        }
+
+        /* Custom Scrollbar */
+        #stockList::-webkit-scrollbar { width: 4px; }
+        #stockList::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+    </style>
+</head>
+<body class="text-slate-900">
+
+    <!-- Login -->
+    <div id="loginOverlay" class="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center p-6">
+        <div class="w-full max-w-sm bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-2xl text-center">
+            <div class="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <i data-lucide="package" class="w-10 h-10 text-white"></i>
+            </div>
+            <h2 class="text-2xl font-black text-slate-800 tracking-tight">QR Kanban Pro</h2>
+            <p class="text-slate-500 text-sm mt-1 mb-8">ระบบจัดการสต็อกและใบรับสินค้า</p>
+            <div class="space-y-3">
+                <button onclick="login('warehouse')" class="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold flex items-center justify-center gap-3 active:scale-95">
+                    <i data-lucide="warehouse"></i> ฝ่ายคลังสินค้า
+                </button>
+                <button onclick="login('customer')" class="w-full bg-slate-800 text-white py-5 rounded-2xl font-bold flex items-center justify-center gap-3 active:scale-95">
+                    <i data-lucide="user"></i> ฝ่ายลูกค้า
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Modal (For Customer) -->
+    <div id="receiptModal" class="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-6 hidden">
+        <div class="w-full max-w-sm bg-white rounded-[2.5rem] shadow-2xl overflow-hidden">
+            <div class="p-8 text-center bg-slate-50">
+                <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="check-circle" class="w-8 h-8"></i>
+                </div>
+                <h2 class="text-xl font-black text-slate-800 uppercase">ได้รับสินค้าแล้ว</h2>
+                <p class="text-xs font-bold text-slate-400 mt-1" id="receiptId">#KB-000000</p>
+            </div>
+            <div class="px-8 pb-8 space-y-4">
+                <div class="receipt-dashed pb-4">
+                    <div class="flex justify-between text-[10px] font-black text-slate-400 uppercase mb-2">
+                        <span>รายการ</span>
+                        <span>จำนวน</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div class="min-w-0 pr-2">
+                            <h3 class="font-black text-slate-800 truncate" id="receiptName">Product Name</h3>
+                            <p class="text-[10px] text-indigo-500 font-black" id="receiptCode">CODE</p>
+                        </div>
+                        <span class="text-2xl font-black text-slate-900" id="receiptQty">1</span>
+                    </div>
+                </div>
+                <div class="text-[10px] text-slate-400 font-bold space-y-1">
+                    <div class="flex justify-between"><span>วันที่:</span> <span id="receiptDate">00/00/00</span></div>
+                    <div class="flex justify-between"><span>เวลา:</span> <span id="receiptTime">00:00</span></div>
+                </div>
+                <button onclick="closeReceipt()" class="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-lg mt-4 active:scale-95 uppercase text-xs">ตกลง</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App UI -->
+    <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col hidden relative pb-10">
+        <header id="appHeader" class="p-6 pb-12 rounded-b-[3.5rem] shadow-xl sticky top-0 z-50">
+            <div class="flex items-center justify-between text-white">
+                <div>
+                    <span id="roleLabel" class="text-[10px] font-black uppercase opacity-80 tracking-widest">ROLE</span>
+                    <h1 class="text-2xl font-black tracking-tight">QR KANBAN</h1>
+                </div>
+                <button onclick="logout()" class="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+            </div>
+        </header>
+
+        <main class="p-6 -mt-18 space-y-6">
+            <!-- Mode Tabs -->
+            <div class="ios-switcher-container shadow-md border border-white/50">
+                <div id="modeSlider" class="ios-slider"></div>
+                <div onclick="switchMode('scan')" id="tabScan" class="ios-tab text-indigo-600"><i data-lucide="camera" class="w-4 h-4"></i> สแกน</div>
+                <div onclick="switchMode('manual')" id="tabManual" class="ios-tab"><i data-lucide="edit-3" class="w-4 h-4"></i> กรอกรหัส</div>
+                <div onclick="switchMode('import')" id="tabImport" class="ios-tab"><i data-lucide="package" class="w-4 h-4"></i> คลังสินค้า</div>
+            </div>
+
+            <!-- Main Workspace -->
+            <div class="bg-white rounded-[2.5rem] p-5 shadow-sm border border-slate-200 min-h-[300px] flex flex-col relative overflow-hidden">
+                
+                <!-- 1. Scan View -->
+                <div id="scanView" class="space-y-5">
+                    <div class="aspect-square bg-slate-50 rounded-[2rem] overflow-hidden relative flex items-center justify-center border-2 border-dashed border-slate-200">
+                        <div id="reader"></div>
+                        <div id="scanPlaceholder" class="absolute text-center opacity-30">
+                            <i data-lucide="qr-code" class="w-12 h-12 mx-auto mb-2"></i>
+                            <p class="text-[10px] font-black uppercase">รอเปิดกล้องเพื่อสแกน</p>
+                        </div>
+                    </div>
+                    <button id="btnToggleCam" onclick="toggleCamera()" class="btn-main shadow-lg">
+                        <i data-lucide="camera"></i> <span>เริ่มสแกนบันทึก</span>
+                    </button>
+                </div>
+
+                <!-- 2. Manual View -->
+                <div id="manualView" class="hidden py-8 text-center flex-1 flex flex-col justify-center">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-4 tracking-widest">ระบุรหัสสินค้า</p>
+                    <input type="text" id="manualInput" placeholder="EX: ITEM-001" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-6 px-6 focus:border-indigo-500 outline-none text-center text-3xl font-black uppercase mb-6 transition-all">
+                    <button onclick="handleManual()" class="btn-main" id="btnManual">
+                        <i data-lucide="save"></i> บันทึกรายการ
+                    </button>
+                </div>
+
+                <!-- 3. Stock/Import View -->
+                <div id="importView" class="hidden py-2 space-y-4">
+                    <div class="flex justify-between items-center px-1">
+                        <h3 class="font-black text-slate-800 text-sm">สต็อกสินค้า</h3>
+                        <label class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black cursor-pointer shadow-md active:scale-95 transition-all">
+                            <i data-lucide="file-up" class="inline w-3 h-3 mr-1"></i> นำเข้า EXCEL
+                            <input type="file" id="excelInput" accept=".xlsx, .xls" class="hidden" onchange="handleExcelFile(event)">
+                        </label>
+                    </div>
+
+                    <!-- รายการที่กำลังนำเข้า (Preview) -->
+                    <div id="importPreview" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-3 space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span class="text-[9px] font-black text-amber-700 uppercase">รายการที่พบในไฟล์</span>
+                            <button onclick="confirmImport()" class="bg-amber-600 text-white px-2 py-1 rounded-md text-[8px] font-black">บันทึกทั้งหมด</button>
+                        </div>
+                        <div id="previewList" class="max-h-[100px] overflow-y-auto text-[10px] font-bold text-amber-900 space-y-1"></div>
+                    </div>
+
+                    <!-- รายการสต็อกปัจจุบัน -->
+                    <div id="stockList" class="max-h-[300px] overflow-y-auto space-y-2 pr-1">
+                        <!-- Stock Items will render here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Section -->
+            <div class="space-y-4">
+                <div class="flex items-center justify-between px-2">
+                    <h2 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
+                        <i data-lucide="history" class="w-4 h-4 text-indigo-500"></i> ล่าสุด
+                    </h2>
+                    <button onclick="clearHistory()" class="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500 transition-colors">ล้างประวัติ</button>
+                </div>
+                <div id="historyContainer" class="space-y-3"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-3xl text-xs font-bold shadow-2xl opacity-0 translate-y-10 transition-all z-[200] pointer-events-none">
+        สำเร็จ
+    </div>
+
+    <script>
+        // --- System State ---
+        let inventory = {
+            "DEMO-01": { name: "ตัวอย่างสินค้า 1", qty: 10 },
+            "DEMO-02": { name: "ตัวอย่างสินค้า 2", qty: 5 }
+        };
+        let history = [];
+        let currentRole = 'warehouse';
+        let scanner = null;
+        let isCamOpen = false;
+        let pendingImportData = [];
+
+        function login(role) {
+            currentRole = role;
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('app').classList.remove('hidden');
+            setupTheme();
+            updateStockUI();
+            renderHistory();
+        }
+
+        function setupTheme() {
+            const header = document.getElementById('appHeader');
+            const roleLab = document.getElementById('roleLabel');
+            const btnCam = document.getElementById('btnToggleCam');
+            const btnMan = document.getElementById('btnManual');
+
+            if (currentRole === 'warehouse') {
+                header.className = "p-6 pb-12 rounded-b-[3.5rem] shadow-xl sticky top-0 z-50 bg-indigo-600";
+                roleLab.innerText = "SENDER: คลังสินค้า";
+                btnCam.className = "btn-main btn-warehouse shadow-lg shadow-indigo-200";
+                btnMan.className = "btn-main btn-warehouse shadow-lg shadow-indigo-200";
+            } else {
+                header.className = "p-6 pb-12 rounded-b-[3.5rem] shadow-xl sticky top-0 z-50 bg-orange-600";
+                roleLab.innerText = "RECEIVER: ลูกค้า";
+                btnCam.className = "btn-main btn-customer shadow-lg shadow-orange-200";
+                btnMan.className = "btn-main btn-customer shadow-lg shadow-orange-200";
+            }
+            if(window.lucide) lucide.createIcons();
+        }
+
+        // --- Enhanced Excel Logic ---
+        function handleExcelFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }); // อ่านแบบ Array เพื่อความแม่นยำ
+
+                    if (jsonData.length < 2) {
+                        showToast("❌ ไฟล์ว่างเปล่าหรือไม่พบข้อมูล");
+                        return;
+                    }
+
+                    // หาตำแหน่งคอลัมน์จากแถวแรก (Header)
+                    const headers = jsonData[0].map(h => h ? h.toString().toLowerCase().trim() : "");
+                    const colIdx = {
+                        code: headers.findIndex(h => h.includes('code') || h.includes('รหัส') || h.includes('id')),
+                        name: headers.findIndex(h => h.includes('name') || h.includes('ชื่อ') || h.includes('รายการ')),
+                        qty: headers.findIndex(h => h.includes('qty') || h.includes('จำนวน') || h.includes('คงเหลือ') || h.includes('amount'))
+                    };
+
+                    if (colIdx.code === -1 || colIdx.name === -1) {
+                        showToast("❌ ไม่พบคอลัมน์ Code หรือ Name");
+                        return;
+                    }
+
+                    pendingImportData = [];
+                    // วนลูปเริ่มจากแถวที่ 2 (ข้อมูล)
+                    for (let i = 1; i < jsonData.length; i++) {
+                        const row = jsonData[i];
+                        if (!row[colIdx.code]) continue; // ข้ามแถวที่ไม่มีรหัส
+
+                        pendingImportData.push({
+                            code: row[colIdx.code].toString().toUpperCase().trim(),
+                            name: row[colIdx.name] ? row[colIdx.name].toString() : "Unknown",
+                            qty: colIdx.qty !== -1 ? parseInt(row[colIdx.qty] || 0) : 0
+                        });
+                    }
+
+                    showImportPreview();
+                } catch (err) {
+                    console.error(err);
+                    showToast("❌ เกิดข้อผิดพลาดในการอ่านไฟล์");
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function showImportPreview() {
+            const preview = document.getElementById('importPreview');
+            const list = document.getElementById('previewList');
+            preview.classList.remove('hidden');
+            list.innerHTML = pendingImportData.map(item => `
+                <div class="flex justify-between border-b border-amber-200 pb-1">
+                    <span>${item.code}: ${item.name}</span>
+                    <span>${item.qty}</span>
+                </div>
+            `).join('');
+        }
+
+        function confirmImport() {
+            pendingImportData.forEach(item => {
+                inventory[item.code] = { name: item.name, qty: item.qty };
+            });
+            document.getElementById('importPreview').classList.add('hidden');
+            showToast(`✅ นำเข้า ${pendingImportData.length} รายการสำเร็จ`);
+            updateStockUI();
+            pendingImportData = [];
+        }
+
+        function updateStockUI() {
+            const container = document.getElementById('stockList');
+            const entries = Object.entries(inventory);
+            
+            if (entries.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-[10px] font-black text-slate-300 uppercase tracking-widest">สต็อกว่างเปล่า</div>`;
+                return;
+            }
+
+            container.innerHTML = entries.map(([code, data]) => `
+                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
+                    <div class="min-w-0 pr-2">
+                        <span class="text-[8px] font-black text-indigo-500 uppercase tracking-tighter">${code}</span>
+                        <h4 class="text-xs font-bold text-slate-800 truncate">${data.name}</h4>
+                    </div>
+                    <div class="text-right flex flex-col items-end">
+                        <span class="text-[8px] font-black text-slate-400 uppercase">Balance</span>
+                        <span class="text-sm font-black ${data.qty <= 3 ? 'text-red-500' : 'text-slate-900'}">${data.qty}</span>
+                    </div>
+                </div>
+            `).join('');
+            if(window.lucide) lucide.createIcons();
+        }
+
+        // --- Core Business Logic ---
+        function handleManual() {
+            const input = document.getElementById('manualInput');
+            const code = input.value.trim().toUpperCase();
+            if (code) processAction(code);
+        }
+
+        function processAction(code) {
+            const data = inventory[code];
+            
+            if (currentRole === 'warehouse') {
+                if (!data) {
+                    showToast("❌ ไม่พบสินค้านี้ในระบบสต็อก");
+                    return;
+                }
+                if (data.qty <= 0) {
+                    showToast("⚠️ สินค้าหมดสต็อก ไม่สามารถตัดจ่ายได้");
+                    return;
+                }
+                inventory[code].qty -= 1;
+                addHistory(code, data.name, 'shipping', 1);
+                showToast(`🚀 ตัดจ่ายสต็อก: ${code} สำเร็จ`);
+                updateStockUI();
+            } else {
+                if (!data) {
+                    showToast("❌ ไม่พบข้อมูลรหัสสินค้าที่ส่งมา");
+                    return;
+                }
+                addHistory(code, data.name, 'received', 1);
+                showReceipt(code, data.name, 1);
+            }
+            document.getElementById('manualInput').value = "";
+            renderHistory();
+        }
+
+        function addHistory(code, name, type, qty) {
+            history.unshift({
+                id: 'TX' + Date.now().toString().slice(-6),
+                code, name, type, qty,
+                time: new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+                date: new Date().toLocaleDateString('th-TH')
+            });
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('historyContainer');
+            if (history.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 opacity-20 text-[10px] font-black uppercase">ไม่มีประวัติรายการ</div>`;
+                return;
+            }
+            container.innerHTML = history.slice(0, 5).map(item => `
+                <div class="history-card bg-white p-4 rounded-3xl border border-slate-200/60 shadow-sm flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-2xl flex items-center justify-center ${item.type === 'shipping' ? 'bg-indigo-50 text-indigo-600' : 'bg-orange-50 text-orange-600'}">
+                        <i data-lucide="${item.type === 'shipping' ? 'arrow-up-right' : 'arrow-down-left'}" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <span class="text-[8px] font-black text-slate-400 uppercase tracking-tighter">${item.code}</span>
+                            <span class="text-[8px] font-bold text-slate-400">${item.time}</span>
+                        </div>
+                        <h4 class="text-xs font-bold text-slate-800">${item.name}</h4>
+                    </div>
+                </div>
+            `).join('');
+            if(window.lucide) lucide.createIcons();
+        }
+
+        function showReceipt(code, name, qty) {
+            const item = history.find(h => h.code === code);
+            document.getElementById('receiptId').innerText = `#${item.id}`;
+            document.getElementById('receiptName').innerText = name;
+            document.getElementById('receiptCode').innerText = code;
+            document.getElementById('receiptQty').innerText = qty;
+            document.getElementById('receiptDate').innerText = item.date;
+            document.getElementById('receiptTime').innerText = item.time;
+            document.getElementById('receiptModal').classList.remove('hidden');
+        }
+
+        function closeReceipt() { document.getElementById('receiptModal').classList.add('hidden'); }
+
+        // --- Navigation & UI Utils ---
+        function switchMode(mode) {
+            stopCamera();
+            const slider = document.getElementById('modeSlider');
+            const pos = { scan: 0, manual: 1, import: 2 };
+            if (slider) slider.style.transform = `translateX(${pos[mode] * 100}%)`;
+            document.getElementById('scanView').classList.toggle('hidden', mode !== 'scan');
+            document.getElementById('manualView').classList.toggle('hidden', mode !== 'manual');
+            document.getElementById('importView').classList.toggle('hidden', mode !== 'import');
+            if (mode === 'manual') document.getElementById('manualInput').focus();
+        }
+
+        async function toggleCamera() {
+            if (isCamOpen) stopCamera();
+            else {
+                scanner = new Html5Qrcode("reader");
+                try {
+                    await scanner.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (text) => { processAction(text); stopCamera(); });
+                    isCamOpen = true;
+                    document.getElementById('scanPlaceholder').classList.add('hidden');
+                    document.getElementById('btnToggleCam').innerHTML = '<i data-lucide="camera-off"></i> <span>ปิดกล้อง</span>';
+                    if(window.lucide) lucide.createIcons();
+                } catch (e) { showToast("❌ กล้องขัดข้อง"); }
+            }
+        }
+
+        function stopCamera() {
+            if (scanner && isCamOpen) {
+                scanner.stop(); isCamOpen = false;
+                document.getElementById('scanPlaceholder').classList.remove('hidden');
+                document.getElementById('btnToggleCam').innerHTML = '<i data-lucide="camera"></i> <span>เริ่มสแกนบันทึก</span>';
+                if(window.lucide) lucide.createIcons();
+            }
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.innerText = msg; t.classList.remove('opacity-0', 'translate-y-10'); t.classList.add('opacity-100', 'translate-y-0');
+            setTimeout(() => { t.classList.add('opacity-0', 'translate-y-10'); }, 2500);
+        }
+
+        function clearHistory() { history = []; renderHistory(); }
+        function logout() { stopCamera(); location.reload(); }
+
+        window.onload = () => { if(window.lucide) lucide.createIcons(); };
+    </script>
+</body>
+</html>
