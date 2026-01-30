@@ -77,7 +77,9 @@
         
         #reader { width: 100% !important; border: none !important; border-radius: 1.5rem; overflow: hidden; }
         
-        .history-card { animation: slideUp 0.4s ease-out forwards; }
+        .history-card { animation: slideUp 0.4s ease-out forwards; cursor: pointer; transition: all 0.2s; }
+        .history-card:active { transform: scale(0.98); background: #f1f5f9; }
+
         @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         #manualInput:focus {
@@ -94,6 +96,14 @@
             animation: fadeIn 0.5s ease-in;
         }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Modal Styles */
+        #modalOverlay {
+            transition: opacity 0.3s ease;
+        }
+        #modalContent {
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
     </style>
 </head>
 <body class="text-slate-900">
@@ -125,7 +135,7 @@
                     <i data-lucide="scan" class="w-4 h-4"></i> <span data-i18n="tab_scan">สแกนกล้อง</span>
                 </div>
                 <div onclick="switchMode('manual')" id="tabManual" class="ios-tab">
-                    <i data-lucide="edit-3" class="w-4 h-4"></i> <span data-i18n="tab_handheld">เครื่องสแกน</span>
+                    <i data-lucide="edit-3" class="w-4 h-4"></i> <span data-i18n="tab_handheld">กรอกรหัส</span>
                 </div>
                 <div onclick="switchMode('import')" id="tabImport" class="ios-tab">
                     <i data-lucide="database" class="w-4 h-4"></i> <span data-i18n="tab_stock">สต็อกสินค้า</span>
@@ -148,11 +158,10 @@
                     </button>
                 </div>
 
-                <!-- MANUAL VIEW -->
+                <!-- MANUAL VIEW (INPUT CODE MODE) -->
                 <div id="manualView" class="hidden py-8 text-center flex-1 flex flex-col justify-center">
-                    <p class="text-[10px] font-black text-blue-600 uppercase mb-2 tracking-widest" data-i18n="handheld_mode">HANDHELD MODE</p>
-                    <p class="text-xs font-bold text-slate-400 mb-6" data-i18n="handheld_desc">สแกนที่ตัวเครื่องเพื่อบันทึกรายการ</p>
-                    <input type="text" id="manualInput" placeholder="..." autocomplete="off" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-6 px-6 outline-none text-center text-3xl font-black uppercase mb-6 transition-all">
+                    <p class="text-xs font-bold text-slate-400 mb-6" data-i18n="handheld_desc">กรอกรหัสสินค้าเพื่อบันทึกรายการ</p>
+                    <input type="text" id="manualInput" placeholder="รหัสสินค้า..." autocomplete="off" class="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-6 px-6 outline-none text-center text-3xl font-black uppercase mb-6 transition-all">
                     <button onclick="handleManual()" class="btn-main shadow-lg shadow-blue-100">
                         <i data-lucide="plus-circle"></i> <span data-i18n="btn_add_to_cart">เพิ่มเข้าใบเสร็จ</span>
                     </button>
@@ -184,7 +193,7 @@
                 </div>
             </div>
 
-            <!-- CART AREA (New) -->
+            <!-- CART AREA -->
             <div id="cartSection" class="hidden space-y-4">
                 <div class="bg-blue-900 text-white rounded-[2.5rem] p-6 shadow-xl border border-blue-800">
                     <div class="flex justify-between items-center mb-4">
@@ -195,9 +204,7 @@
                         <i data-lucide="shopping-cart" class="w-8 h-8 opacity-20"></i>
                     </div>
                     
-                    <div id="cartList" class="space-y-3 mb-6 max-h-[200px] overflow-y-auto pr-2">
-                        <!-- Items will be here -->
-                    </div>
+                    <div id="cartList" class="space-y-3 mb-6 max-h-[200px] overflow-y-auto pr-2"></div>
 
                     <button onclick="confirmReceipt()" class="btn-main btn-confirm-receipt shadow-lg shadow-emerald-900/40">
                         <i data-lucide="printer"></i> <span data-i18n="btn_finalize_receipt">ยืนยันและออกใบเสร็จ</span>
@@ -227,6 +234,31 @@
         </main>
     </div>
 
+    <!-- DETAIL MODAL -->
+    <div id="modalOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end justify-center opacity-0 pointer-events-none p-4">
+        <div id="modalContent" class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden translate-y-full">
+            <div class="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                <div>
+                    <h3 id="modalReceiptNo" class="text-lg font-black font-mono text-blue-600">RE-XXXX</h3>
+                    <p id="modalDateTime" class="text-[10px] font-bold text-slate-400">Date | Time</p>
+                </div>
+                <button onclick="closeModal()" class="w-10 h-10 bg-white border border-slate-100 rounded-xl flex items-center justify-center shadow-sm">
+                    <i data-lucide="x" class="w-5 h-5 text-slate-400"></i>
+                </button>
+            </div>
+            <div class="p-6">
+                <div id="modalItemList" class="space-y-3 max-h-[40vh] overflow-y-auto pr-2"></div>
+                <div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
+                    <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Total Items</span>
+                    <span id="modalTotalQty" class="text-xl font-black text-slate-900">0</span>
+                </div>
+                <button onclick="closeModal()" class="btn-main mt-6 bg-slate-900 shadow-none">
+                    CLOSE
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-3xl text-xs font-bold shadow-2xl opacity-0 translate-y-10 transition-all duration-300 z-[200] pointer-events-none text-center">
         สำเร็จ
     </div>
@@ -238,20 +270,20 @@
         let currentLang = localStorage.getItem('appLang') || 'th';
         let scannerObj = null;
         let isCamOpen = false;
-        let currentCart = []; // List of items in current receipt
+        let currentCart = [];
 
         const translations = {
             th: {
                 storage_active: "ระบบบันทึกข้อมูลทำงานอยู่",
                 app_title: "ระบบส่งสินค้า",
                 tab_scan: "สแกนกล้อง",
-                tab_handheld: "เครื่องสแกน",
+                tab_handheld: "กรอกรหัส",
                 tab_stock: "สต็อกสินค้า",
                 wait_scan: "รอสแกนผ่านกล้อง",
                 btn_open_camera: "เปิดกล้องสแกน",
                 btn_close_camera: "ปิดกล้อง",
-                handheld_mode: "โหมดสแกนเนอร์",
-                handheld_desc: "สแกนที่ตัวเครื่องเพื่อบันทึกรายการ",
+                handheld_mode: "กรอกรหัสสินค้า",
+                handheld_desc: "กรอกรหัสสินค้าเพื่อบันทึกรายการ",
                 btn_confirm: "ยืนยันรหัส",
                 btn_add_to_cart: "เพิ่มเข้าใบเสร็จ",
                 current_stock: "รายการสต็อกปัจจุบัน",
@@ -272,13 +304,13 @@
                 storage_active: "Storage Active",
                 app_title: "DISPATCH SYSTEM",
                 tab_scan: "Camera Scan",
-                tab_handheld: "Handheld",
+                tab_handheld: "Input Code",
                 tab_stock: "Stock List",
                 wait_scan: "Wait for Camera",
                 btn_open_camera: "Open Camera",
                 btn_close_camera: "Close Camera",
-                handheld_mode: "HANDHELD MODE",
-                handheld_desc: "Use device scanner to record",
+                handheld_mode: "INPUT PRODUCT CODE",
+                handheld_desc: "Input code to record items",
                 btn_confirm: "Confirm Code",
                 btn_add_to_cart: "Add to Receipt",
                 current_stock: "Current Stock",
@@ -351,7 +383,6 @@
             currentLang = currentLang === 'th' ? 'en' : 'th';
             localStorage.setItem('appLang', currentLang);
             updateUI(); updateStockUI(); renderHistory(); renderCart();
-            showToast(currentLang === 'th' ? "เปลี่ยนภาษาสำเร็จ" : "Language Switched");
         }
 
         const manualInput = document.getElementById('manualInput');
@@ -361,12 +392,8 @@
             const product = await db.inventory.get(code);
             if (!product) { playBeep(false); showToast(translations[currentLang].err_not_found); return; }
             if (product.qty <= 0) { playBeep(false); showToast(translations[currentLang].err_out_stock); return; }
-
-            // Check if item already in cart
             const inCartCount = currentCart.filter(i => i.code === code).length;
-            if (inCartCount >= product.qty) {
-                playBeep(false); showToast(translations[currentLang].err_out_stock); return;
-            }
+            if (inCartCount >= product.qty) { playBeep(false); showToast(translations[currentLang].err_out_stock); return; }
 
             currentCart.push({ ...product });
             playBeep(true);
@@ -374,25 +401,14 @@
             renderCart();
         }
 
-        function removeFromCart(index) {
-            currentCart.splice(index, 1);
-            renderCart();
-        }
+        function removeFromCart(index) { currentCart.splice(index, 1); renderCart(); }
 
         function renderCart() {
             const section = document.getElementById('cartSection');
             const list = document.getElementById('cartList');
             const receiptNoEl = document.getElementById('currentReceiptNo');
-
-            if (currentCart.length === 0) {
-                section.classList.add('hidden');
-                return;
-            }
-
-            if (section.classList.contains('hidden')) {
-                receiptNoEl.innerText = generateReceiptNo();
-            }
-
+            if (currentCart.length === 0) { section.classList.add('hidden'); return; }
+            if (section.classList.contains('hidden')) { receiptNoEl.innerText = generateReceiptNo(); }
             section.classList.remove('hidden');
             list.innerHTML = currentCart.map((item, idx) => `
                 <div class="flex items-center justify-between bg-blue-800/50 p-3 rounded-2xl border border-blue-700/50">
@@ -411,20 +427,15 @@
         async function confirmReceipt() {
             if (currentCart.length === 0) return;
             const receiptNo = document.getElementById('currentReceiptNo').innerText;
-
             await db.transaction('rw', db.inventory, db.history, async () => {
-                // Update stock and group by code for stock deduction
                 const grouped = currentCart.reduce((acc, item) => {
                     acc[item.code] = (acc[item.code] || 0) + 1;
                     return acc;
                 }, {});
-
                 for (const [code, deductQty] of Object.entries(grouped)) {
                     const product = await db.inventory.get(code);
                     await db.inventory.update(code, { qty: product.qty - deductQty });
                 }
-
-                // Save to history
                 await db.history.add({
                     receiptNo: receiptNo,
                     items: currentCart,
@@ -433,11 +444,7 @@
                     date: new Date().toLocaleDateString('th-TH')
                 });
             });
-
-            currentCart = [];
-            renderCart();
-            updateStockUI();
-            renderHistory();
+            currentCart = []; renderCart(); updateStockUI(); renderHistory();
             showToast(translations[currentLang].success_receipt);
         }
 
@@ -478,125 +485,19 @@
             `).join('');
         }
 
-        async function exportExcel() {
-            const logs = await db.history.toArray();
-            if (logs.length === 0) { showToast("ไม่มีข้อมูลสำหรับส่งออก"); return; }
-            const data = logs.flatMap(l => l.items.map(item => ({
-                "เลขที่ใบเสร็จ": l.receiptNo,
-                "รหัสสินค้า": item.code,
-                "ชื่อสินค้า": item.name,
-                "วันที่": l.date,
-                "เวลา": l.time
-            })));
-            const ws = XLSX.utils.json_to_sheet(data);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Dispatch_History");
-            XLSX.writeFile(wb, `Dispatch_History_${new Date().toISOString().slice(0,10)}.xlsx`);
-            showToast("Export Excel สำเร็จ");
-        }
-
-        async function exportPDF() {
-            const { jsPDF } = window.jspdf;
-            const logs = await db.history.toArray();
-            if (logs.length === 0) { showToast("ไม่มีข้อมูลสำหรับส่งออก"); return; }
-            const doc = new jsPDF();
-            doc.text("Daily Dispatch Report (By Receipt)", 14, 15);
-            const tableBody = logs.flatMap(l => l.items.map(item => [l.receiptNo, item.code, item.name, l.date, l.time]));
-            doc.autoTable({ head: [['Receipt No', 'Code', 'Name', 'Date', 'Time']], body: tableBody, startY: 20 });
-            doc.save(`Dispatch_Report_${new Date().toISOString().slice(0,10)}.pdf`);
-            showToast("Export PDF สำเร็จ");
-        }
-
-        function handleExcelFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { header: 1 });
-                
-                if (jsonData.length < 1) { 
-                    showToast("ไฟล์ไม่มีข้อมูล"); 
-                    event.target.value = "";
-                    return; 
-                }
-
-                let headerRowIndex = -1;
-                let cIdx = -1, nIdx = -1, qIdx = -1;
-
-                const codeKeywords = ['code', 'รหัส', 'barcode', 'sku', 'id', 'รหัสสินค้า'];
-                const nameKeywords = ['name', 'ชื่อ', 'รายการ', 'item', 'product', 'ชื่อสินค้า'];
-                const qtyKeywords = ['qty', 'จำนวน', 'สต็อก', 'คงเหลือ', 'stock', 'amount'];
-
-                for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
-                    const row = jsonData[i].map(cell => cell?.toString().toLowerCase().trim() || "");
-                    cIdx = row.findIndex(val => codeKeywords.some(k => val.includes(k)));
-                    nIdx = row.findIndex(val => nameKeywords.some(k => val.includes(k)));
-                    qIdx = row.findIndex(val => qtyKeywords.some(k => val.includes(k)));
-                    if (cIdx !== -1) { headerRowIndex = i; break; }
-                }
-
-                if (headerRowIndex === -1) {
-                    if (!confirm("ไม่พบหัวตาราง ต้องการใช้ A, B, C หรือไม่?")) { event.target.value = ""; return; }
-                    headerRowIndex = 0; cIdx = 0; nIdx = 1; qIdx = 2;
-                } else { headerRowIndex += 1; }
-
-                pendingImportData = jsonData.slice(headerRowIndex)
-                    .filter(row => row[cIdx])
-                    .map(row => ({
-                        code: row[cIdx].toString().toUpperCase().trim(),
-                        name: row[nIdx]?.toString().trim() || "No Name",
-                        qty: parseInt(row[qIdx]) || 0
-                    }));
-
-                if (pendingImportData.length > 0) {
-                    document.getElementById('importPreview').classList.remove('hidden');
-                    document.getElementById('previewList').innerHTML = pendingImportData.slice(0, 5).map(i => 
-                        `<div class='flex justify-between py-1 border-b border-blue-100'><span class="truncate pr-2">${i.code} - ${i.name}</span><span class="font-bold text-blue-600">+${i.qty}</span></div>`
-                    ).join('');
-                } else { 
-                    showToast("ไม่พบข้อมูล"); event.target.value = ""; 
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        async function confirmImport() {
-            if (pendingImportData.length === 0) return;
-            for(const item of pendingImportData) {
-                const ex = await db.inventory.get(item.code);
-                if(ex) await db.inventory.update(item.code, { qty: ex.qty + item.qty });
-                else await db.inventory.add(item);
-            }
-            pendingImportData = [];
-            document.getElementById('importPreview').classList.add('hidden');
-            document.getElementById('excelInput').value = "";
-            updateStockUI(); 
-            showToast("นำเข้าข้อมูลสำเร็จ");
-        }
-
-        function cancelImport() { 
-            pendingImportData = []; 
-            document.getElementById('importPreview').classList.add('hidden'); 
-            document.getElementById('excelInput').value = "";
-        }
-
         async function renderHistory() {
             const container = document.getElementById('historyContainer');
             const exportBtn = document.getElementById('exportBtnGroup');
-            const data = await db.history.reverse().limit(10).toArray();
+            const data = await db.history.reverse().limit(20).toArray();
             
             if (data.length === 0) {
                 container.innerHTML = `<div class="text-center py-8 opacity-20 text-[10px] font-black uppercase">ยังไม่มีรายการใบเสร็จ</div>`;
                 exportBtn.classList.remove('visible'); 
                 return;
-            } else {
-                exportBtn.classList.add('visible'); 
-            }
+            } else { exportBtn.classList.add('visible'); }
 
             container.innerHTML = data.map(receipt => `
-                <div class="history-card bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                <div onclick="viewReceiptDetail(${receipt.id})" class="history-card bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
                     <div class="flex justify-between items-start">
                         <div class="flex flex-col">
                             <span class="text-[8px] font-black text-blue-500 uppercase tracking-widest">${receipt.receiptNo}</span>
@@ -607,12 +508,146 @@
                         </div>
                     </div>
                     <div class="space-y-1">
-                        ${receipt.items.slice(0, 3).map(i => `<p class="text-[11px] text-slate-600 font-medium truncate">• ${i.name}</p>`).join('')}
-                        ${receipt.items.length > 3 ? `<p class="text-[10px] text-slate-400 italic">... and ${receipt.items.length - 3} more</p>` : ''}
+                        ${receipt.items.slice(0, 2).map(i => `<p class="text-[11px] text-slate-600 font-medium truncate">• ${i.name}</p>`).join('')}
+                        ${receipt.items.length > 2 ? `<p class="text-[10px] text-slate-400 italic">+${receipt.items.length - 2} more items...</p>` : ''}
                     </div>
                 </div>
             `).join('');
             lucide.createIcons();
+        }
+
+        // --- Receipt Detail Functions ---
+        async function viewReceiptDetail(id) {
+            const receipt = await db.history.get(id);
+            if (!receipt) return;
+
+            document.getElementById('modalReceiptNo').innerText = receipt.receiptNo;
+            document.getElementById('modalDateTime').innerText = `${receipt.date} | ${receipt.time}`;
+            document.getElementById('modalTotalQty').innerText = receipt.totalQty;
+
+            // Group items to show quantities if multiple same items
+            const grouped = receipt.items.reduce((acc, item) => {
+                if (!acc[item.code]) acc[item.code] = { name: item.name, count: 0 };
+                acc[item.code].count++;
+                return acc;
+            }, {});
+
+            document.getElementById('modalItemList').innerHTML = Object.entries(grouped).map(([code, info]) => `
+                <div class="flex justify-between items-center py-3 border-b border-slate-50">
+                    <div class="min-w-0 flex-1 pr-4">
+                        <p class="text-[10px] font-black text-blue-500 uppercase tracking-wider">${code}</p>
+                        <p class="text-xs font-bold text-slate-800 truncate">${info.name}</p>
+                    </div>
+                    <div class="bg-blue-50 text-blue-600 font-black px-3 py-1 rounded-lg text-xs">x${info.count}</div>
+                </div>
+            `).join('');
+
+            // Show Modal
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            overlay.classList.remove('pointer-events-none');
+            overlay.style.opacity = '1';
+            content.style.transform = 'translateY(0)';
+            lucide.createIcons();
+        }
+
+        function closeModal() {
+            const overlay = document.getElementById('modalOverlay');
+            const content = document.getElementById('modalContent');
+            overlay.style.opacity = '0';
+            content.style.transform = 'translateY(100%)';
+            setTimeout(() => {
+                overlay.classList.add('pointer-events-none');
+            }, 300);
+        }
+
+        // --- Export Functions ---
+        async function exportExcel() {
+            const logs = await db.history.toArray();
+            if (logs.length === 0) return;
+            const data = logs.flatMap(l => l.items.map(item => ({ "Receipt": l.receiptNo, "Code": item.code, "Name": item.name, "Date": l.date, "Time": l.time })));
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "History");
+            XLSX.writeFile(wb, `Dispatch_History.xlsx`);
+        }
+
+        async function exportPDF() {
+            const { jsPDF } = window.jspdf;
+            const logs = await db.history.toArray();
+            if (logs.length === 0) return;
+            const doc = new jsPDF();
+            doc.text("Dispatch Report", 14, 15);
+            const tableBody = logs.flatMap(l => l.items.map(item => [l.receiptNo, item.code, item.name, l.date, l.time]));
+            doc.autoTable({ head: [['Receipt', 'Code', 'Name', 'Date', 'Time']], body: tableBody, startY: 20 });
+            doc.save(`Dispatch_Report.pdf`);
+        }
+
+        // --- Import Logic (FIXED FOR REPEATED IMPORT) ---
+        function handleExcelFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                    
+                    const codeKeywords = ['code', 'รหัส', 'barcode', 'sku', 'id'];
+                    const nameKeywords = ['name', 'ชื่อ', 'รายการ', 'item', 'product'];
+                    const qtyKeywords = ['qty', 'จำนวน', 'สต็อก', 'คงเหลือ', 'stock'];
+                    
+                    let headers = jsonData[0].map(h => h?.toString().toLowerCase().trim() || "");
+                    let cIdx = headers.findIndex(val => codeKeywords.some(k => val.includes(k)));
+                    let nIdx = headers.findIndex(val => nameKeywords.some(k => val.includes(k)));
+                    let qIdx = headers.findIndex(val => qtyKeywords.some(k => val.includes(k)));
+
+                    if (cIdx === -1) {
+                        alert("ไม่พบคอลัมน์ 'รหัสสินค้า'");
+                        return;
+                    }
+
+                    pendingImportData = jsonData.slice(1).filter(row => row[cIdx]).map(row => ({
+                        code: row[cIdx].toString().toUpperCase().trim(),
+                        name: row[nIdx]?.toString().trim() || "No Name",
+                        qty: parseInt(row[qIdx]) || 0
+                    }));
+
+                    if (pendingImportData.length > 0) {
+                        document.getElementById('importPreview').classList.remove('hidden');
+                        document.getElementById('previewList').innerHTML = pendingImportData.slice(0, 5).map(i => `<div class='flex justify-between py-1 border-b border-blue-100'><span>${i.code} - ${i.name}</span><b>+${i.qty}</b></div>`).join('');
+                    }
+                } catch (err) {
+                    alert("เกิดข้อผิดพลาดในการอ่านไฟล์");
+                } finally {
+                    event.target.value = "";
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function confirmImport() {
+            if (pendingImportData.length === 0) return;
+            
+            await db.transaction('rw', db.inventory, async () => {
+                for(const item of pendingImportData) {
+                    const ex = await db.inventory.get(item.code);
+                    if(ex) await db.inventory.update(item.code, { qty: ex.qty + item.qty });
+                    else await db.inventory.add(item);
+                }
+            });
+            
+            pendingImportData = []; 
+            document.getElementById('importPreview').classList.add('hidden');
+            updateStockUI(); 
+            showToast("นำเข้าสำเร็จ");
+        }
+
+        function cancelImport() { 
+            pendingImportData = []; 
+            document.getElementById('importPreview').classList.add('hidden'); 
+            document.getElementById('excelInput').value = "";
         }
 
         async function toggleCamera() {
@@ -623,9 +658,9 @@
                     await scannerObj.start({ facingMode: "environment" }, { fps: 20, qrbox: 250 }, (text) => { addToCart(text.toUpperCase()); });
                     isCamOpen = true;
                     document.getElementById('scanPlaceholder').classList.add('hidden');
-                    document.getElementById('btnToggleCam').innerHTML = `<i data-lucide="camera-off"></i> <span>${translations[currentLang].btn_close_camera}</span>`;
+                    document.getElementById('btnToggleCam').innerHTML = `<i data-lucide="camera-off"></i> <span>CLOSE CAMERA</span>`;
                     lucide.createIcons();
-                } catch (e) { showToast("Error Camera"); }
+                } catch (e) { showToast("Camera Error"); }
             }
         }
 
@@ -633,18 +668,12 @@
             if (scannerObj && isCamOpen) {
                 scannerObj.stop(); isCamOpen = false;
                 document.getElementById('scanPlaceholder').classList.remove('hidden');
-                document.getElementById('btnToggleCam').innerHTML = `<i data-lucide="camera"></i> <span>${translations[currentLang].btn_open_camera}</span>`;
+                document.getElementById('btnToggleCam').innerHTML = `<i data-lucide="camera"></i> <span>OPEN CAMERA</span>`;
                 lucide.createIcons();
             }
         }
 
-        async function clearHistory() { 
-            if(confirm("ต้องการล้างประวัติใบเสร็จทั้งหมดใช่หรือไม่?")) { 
-                await db.history.clear(); 
-                renderHistory(); 
-                showToast("ล้างประวัติสำเร็จ");
-            } 
-        }
+        async function clearHistory() { if(confirm("Clear history?")) { await db.history.clear(); renderHistory(); } }
 
         window.onload = () => { lucide.createIcons(); updateUI(); updateStockUI(); renderHistory(); };
     </script>
