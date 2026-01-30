@@ -88,15 +88,6 @@
             box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
         }
 
-        .export-group {
-            display: none; 
-        }
-        .export-group.visible {
-            display: flex;
-            animation: fadeIn 0.5s ease-in;
-        }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
         /* Modal Styles */
         #modalOverlay {
             transition: opacity 0.3s ease;
@@ -218,16 +209,7 @@
                     <h2 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase tracking-tight">
                         <i data-lucide="history" class="w-4 h-4 text-blue-500"></i> <span data-i18n="history_title">ประวัติใบเสร็จ</span>
                     </h2>
-                    
-                    <div id="exportBtnGroup" class="export-group gap-2">
-                        <button onclick="exportExcel()" class="w-8 h-8 flex items-center justify-center bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors shadow-sm" title="Export Excel">
-                            <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
-                        </button>
-                        <button onclick="exportPDF()" class="w-8 h-8 flex items-center justify-center bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors shadow-sm" title="Export PDF">
-                            <i data-lucide="file-text" class="w-4 h-4"></i>
-                        </button>
-                        <button onclick="clearHistory()" class="ml-2 text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500" data-i18n="btn_clear_history">ล้างประวัติ</button>
-                    </div>
+                    <button onclick="clearHistory()" class="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500" data-i18n="btn_clear_history">ล้างประวัติ</button>
                 </div>
                 <div id="historyContainer" class="space-y-3"></div>
             </div>
@@ -247,7 +229,18 @@
                 </button>
             </div>
             <div class="p-6">
-                <div id="modalItemList" class="space-y-3 max-h-[40vh] overflow-y-auto pr-2"></div>
+                <!-- Action Buttons in Modal -->
+                <div class="flex gap-2 mb-6">
+                    <button id="btnExportExcel" class="flex-1 py-3 bg-green-50 text-green-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-green-100">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel
+                    </button>
+                    <button id="btnExportPDF" class="flex-1 py-3 bg-red-50 text-red-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-red-100">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> PDF
+                    </button>
+                </div>
+
+                <div id="modalItemList" class="space-y-3 max-h-[35vh] overflow-y-auto pr-2"></div>
+                
                 <div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
                     <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Total Items</span>
                     <span id="modalTotalQty" class="text-xl font-black text-slate-900">0</span>
@@ -271,6 +264,7 @@
         let scannerObj = null;
         let isCamOpen = false;
         let currentCart = [];
+        let currentViewingReceiptId = null;
 
         const translations = {
             th: {
@@ -487,14 +481,12 @@
 
         async function renderHistory() {
             const container = document.getElementById('historyContainer');
-            const exportBtn = document.getElementById('exportBtnGroup');
             const data = await db.history.reverse().limit(20).toArray();
             
             if (data.length === 0) {
                 container.innerHTML = `<div class="text-center py-8 opacity-20 text-[10px] font-black uppercase">ยังไม่มีรายการใบเสร็จ</div>`;
-                exportBtn.classList.remove('visible'); 
                 return;
-            } else { exportBtn.classList.add('visible'); }
+            }
 
             container.innerHTML = data.map(receipt => `
                 <div onclick="viewReceiptDetail(${receipt.id})" class="history-card bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
@@ -507,10 +499,6 @@
                             ${receipt.totalQty} ${translations[currentLang].items_unit}
                         </div>
                     </div>
-                    <div class="space-y-1">
-                        ${receipt.items.slice(0, 2).map(i => `<p class="text-[11px] text-slate-600 font-medium truncate">• ${i.name}</p>`).join('')}
-                        ${receipt.items.length > 2 ? `<p class="text-[10px] text-slate-400 italic">+${receipt.items.length - 2} more items...</p>` : ''}
-                    </div>
                 </div>
             `).join('');
             lucide.createIcons();
@@ -520,12 +508,12 @@
         async function viewReceiptDetail(id) {
             const receipt = await db.history.get(id);
             if (!receipt) return;
+            currentViewingReceiptId = id;
 
             document.getElementById('modalReceiptNo').innerText = receipt.receiptNo;
             document.getElementById('modalDateTime').innerText = `${receipt.date} | ${receipt.time}`;
             document.getElementById('modalTotalQty').innerText = receipt.totalQty;
 
-            // Group items to show quantities if multiple same items
             const grouped = receipt.items.reduce((acc, item) => {
                 if (!acc[item.code]) acc[item.code] = { name: item.name, count: 0 };
                 acc[item.code].count++;
@@ -542,6 +530,10 @@
                 </div>
             `).join('');
 
+            // Setup download handlers for this specific receipt
+            document.getElementById('btnExportExcel').onclick = () => exportSingleExcel(receipt);
+            document.getElementById('btnExportPDF').onclick = () => exportSinglePDF(receipt);
+
             // Show Modal
             const overlay = document.getElementById('modalOverlay');
             const content = document.getElementById('modalContent');
@@ -556,80 +548,61 @@
             const content = document.getElementById('modalContent');
             overlay.style.opacity = '0';
             content.style.transform = 'translateY(100%)';
-            setTimeout(() => {
-                overlay.classList.add('pointer-events-none');
-            }, 300);
+            setTimeout(() => { overlay.classList.add('pointer-events-none'); }, 300);
         }
 
-        // --- Export Functions ---
-        async function exportExcel() {
-            const logs = await db.history.toArray();
-            if (logs.length === 0) return;
-            const data = logs.flatMap(l => l.items.map(item => ({ "Receipt": l.receiptNo, "Code": item.code, "Name": item.name, "Date": l.date, "Time": l.time })));
+        // --- Single Export Functions ---
+        function exportSingleExcel(receipt) {
+            const data = receipt.items.map(item => ({ "Receipt": receipt.receiptNo, "Code": item.code, "Name": item.name, "Date": receipt.date, "Time": receipt.time }));
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "History");
-            XLSX.writeFile(wb, `Dispatch_History.xlsx`);
+            XLSX.utils.book_append_sheet(wb, ws, "Receipt");
+            XLSX.writeFile(wb, `${receipt.receiptNo}.xlsx`);
         }
 
-        async function exportPDF() {
+        function exportSinglePDF(receipt) {
             const { jsPDF } = window.jspdf;
-            const logs = await db.history.toArray();
-            if (logs.length === 0) return;
             const doc = new jsPDF();
-            doc.text("Dispatch Report", 14, 15);
-            const tableBody = logs.flatMap(l => l.items.map(item => [l.receiptNo, item.code, item.name, l.date, l.time]));
-            doc.autoTable({ head: [['Receipt', 'Code', 'Name', 'Date', 'Time']], body: tableBody, startY: 20 });
-            doc.save(`Dispatch_Report.pdf`);
+            doc.text(`Receipt: ${receipt.receiptNo}`, 14, 15);
+            doc.text(`Date: ${receipt.date} ${receipt.time}`, 14, 22);
+            const tableBody = receipt.items.map(item => [item.code, item.name]);
+            doc.autoTable({ head: [['Code', 'Product Name']], body: tableBody, startY: 30 });
+            doc.save(`${receipt.receiptNo}.pdf`);
         }
 
-        // --- Import Logic (FIXED FOR REPEATED IMPORT) ---
+        // --- Import Logic ---
         function handleExcelFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-            
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
-                    
                     const codeKeywords = ['code', 'รหัส', 'barcode', 'sku', 'id'];
                     const nameKeywords = ['name', 'ชื่อ', 'รายการ', 'item', 'product'];
                     const qtyKeywords = ['qty', 'จำนวน', 'สต็อก', 'คงเหลือ', 'stock'];
-                    
                     let headers = jsonData[0].map(h => h?.toString().toLowerCase().trim() || "");
                     let cIdx = headers.findIndex(val => codeKeywords.some(k => val.includes(k)));
                     let nIdx = headers.findIndex(val => nameKeywords.some(k => val.includes(k)));
                     let qIdx = headers.findIndex(val => qtyKeywords.some(k => val.includes(k)));
-
-                    if (cIdx === -1) {
-                        alert("ไม่พบคอลัมน์ 'รหัสสินค้า'");
-                        return;
-                    }
-
+                    if (cIdx === -1) { alert("ไม่พบคอลัมน์ 'รหัสสินค้า'"); return; }
                     pendingImportData = jsonData.slice(1).filter(row => row[cIdx]).map(row => ({
                         code: row[cIdx].toString().toUpperCase().trim(),
                         name: row[nIdx]?.toString().trim() || "No Name",
                         qty: parseInt(row[qIdx]) || 0
                     }));
-
                     if (pendingImportData.length > 0) {
                         document.getElementById('importPreview').classList.remove('hidden');
                         document.getElementById('previewList').innerHTML = pendingImportData.slice(0, 5).map(i => `<div class='flex justify-between py-1 border-b border-blue-100'><span>${i.code} - ${i.name}</span><b>+${i.qty}</b></div>`).join('');
                     }
-                } catch (err) {
-                    alert("เกิดข้อผิดพลาดในการอ่านไฟล์");
-                } finally {
-                    event.target.value = "";
-                }
+                } catch (err) { alert("เกิดข้อผิดพลาดในการอ่านไฟล์"); } finally { event.target.value = ""; }
             };
             reader.readAsArrayBuffer(file);
         }
 
         async function confirmImport() {
             if (pendingImportData.length === 0) return;
-            
             await db.transaction('rw', db.inventory, async () => {
                 for(const item of pendingImportData) {
                     const ex = await db.inventory.get(item.code);
@@ -637,18 +610,11 @@
                     else await db.inventory.add(item);
                 }
             });
-            
-            pendingImportData = []; 
-            document.getElementById('importPreview').classList.add('hidden');
-            updateStockUI(); 
-            showToast("นำเข้าสำเร็จ");
+            pendingImportData = []; document.getElementById('importPreview').classList.add('hidden');
+            updateStockUI(); showToast("นำเข้าสำเร็จ");
         }
 
-        function cancelImport() { 
-            pendingImportData = []; 
-            document.getElementById('importPreview').classList.add('hidden'); 
-            document.getElementById('excelInput').value = "";
-        }
+        function cancelImport() { pendingImportData = []; document.getElementById('importPreview').classList.add('hidden'); }
 
         async function toggleCamera() {
             if (isCamOpen) stopCamera();
