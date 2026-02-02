@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="manifest" href="manifest.json">
     <title>Warehouse Dispatch System - Smart Accumulation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -14,7 +16,46 @@
     
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&family=Sarabun:wght@300;400;600;700&display=swap');
-        body { font-family: 'Plus Jakarta Sans', 'Sarabun', sans-serif; background: #f8fafc; overscroll-behavior: none; }
+        body { font-family: 'Plus Jakarta Sans', 'Sarabun', sans-serif; background: #f8fafc; overscroll-behavior: none; transition: background 0.3s, color 0.3s; }
+        body.dark { background: #0f172a; color: #e2e8f0; }
+        body.dark .bg-white { background: #1e293b !important; }
+        body.dark .text-slate-900 { color: #e2e8f0 !important; }
+        body.dark .text-slate-800 { color: #cbd5e1 !important; }
+        body.dark .text-slate-700 { color: #94a3b8 !important; }
+        body.dark button.text-slate-700, body.dark label.text-slate-700 { color: #cbd5e1 !important; }
+        body.dark .text-slate-400 { color: #64748b !important; }
+        body.dark .border-slate-200 { border-color: #334155 !important; }
+        body.dark .border-slate-100 { border-color: #334155 !important; }
+        body.dark .bg-slate-50 { background: #334155 !important; }
+        body.dark .ios-switcher-container { background: #334155; border-color: #475569; }
+        body.dark header { background: linear-gradient(135deg, #0c2340 0%, #1e3a8a 50%, #172554 100%) !important; }
+        body.dark .ios-tab.active { color: #38bdf8 !important; }
+        body.dark .text-blue-400 { color: #38bdf8 !important; }
+        body.dark .text-blue-500 { color: #2563eb !important; }
+        body.dark .text-blue-600 { color: #1d4ed8 !important; }
+        body.dark .text-blue-700 { color: #1e40af !important; }
+        body.dark .bg-blue-50 { background: #0c2340 !important; }
+        body.dark .bg-blue-100 { background: rgba(30, 58, 138, 0.4) !important; }
+        body.dark .border-blue-100 { border-color: #1e40af !important; }
+        body.dark .border-blue-200 { border-color: #1e3a8a !important; }
+        body.dark #summarySection { background: linear-gradient(135deg, #0c2340 0%, #1e3a8a 100%) !important; border-color: #1e3a8a !important; }
+        body.dark .ios-slider { background: #334155 !important; box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important; }
+        body.dark header button.bg-white { background: #334155 !important; color: #93c5fd !important; border-color: #475569 !important; }
+        body.dark header button.bg-white:hover { background: #475569 !important; }
+        body.dark #modalContent { background: #1e293b !important; }
+        body.dark #modalContent button.bg-white { background: #334155 !important; border-color: #475569 !important; color: #e2e8f0 !important; }
+        body.dark #modalContent button.bg-white:hover { background: #475569 !important; }
+        body.dark .bg-white\/80 { background: rgba(30, 41, 59, 0.9) !important; }
+        body.dark .stock-item-card:hover { background: #334155 !important; }
+        body.dark .stock-item-card:active { background: #475569 !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important; }
+        body.dark .history-card:active { background: #334155 !important; }
+        body.dark .bg-slate-100 { background: #334155 !important; }
+        body.dark .bg-slate-100:hover { background: #475569 !important; }
+        body.dark #modalContent .bg-blue-50 { background: rgba(30, 58, 138, 0.5) !important; border-color: #1e3a8a !important; color: #93c5fd !important; }
+        body.dark #modalContent .bg-green-50 { background: rgba(21, 94, 46, 0.4) !important; border-color: #166534 !important; color: #86efac !important; }
+        body.dark #modalContent .bg-red-50 { background: rgba(127, 29, 29, 0.4) !important; border-color: #991b1b !important; color: #fca5a5 !important; }
+        body.dark .bg-red-50 { background: rgba(127, 29, 29, 0.3) !important; border-color: #7f1d1d !important; color: #fca5a5 !important; }
+        body.dark .bg-red-50:hover { background: rgba(127, 29, 29, 0.5) !important; }
         .ios-switcher-container { position: relative; background: #f1f5f9; padding: 4px; border-radius: 18px; display: flex; width: 100%; isolation: isolate; border: 1px solid #e2e8f0; }
         .ios-slider { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: white; border-radius: 14px; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.1); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 0; }
         .ios-tab { position: relative; z-index: 1; flex: 1; padding: 12px 0; font-size: 11px; font-weight: 700; text-align: center; color: #94a3b8; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; transition: color 0.3s; }
@@ -24,11 +65,17 @@
         #reader { width: 100% !important; border: none !important; border-radius: 1.5rem; overflow: hidden; }
         .custom-scroll::-webkit-scrollbar { width: 4px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        body.dark .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
         .history-card { transition: all 0.2s; cursor: pointer; }
         .history-card:active { transform: scale(0.98); background: #f1f5f9; }
         .stock-item-card { transition: all 0.2s; cursor: pointer; }
         .stock-item-card:active { transform: scale(0.98); background: white; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15); }
-        .stock-item-card.disabled { cursor: not-allowed; opacity: 0.6; }
+        .stock-item-card.disabled { cursor: not-allowed; }
+        .stock-out { background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%) !important; border: 2px solid #f87171 !important; }
+        .stock-out .text-slate-800 { color: #991b1b !important; }
+        body.dark .stock-out { background: linear-gradient(135deg, rgba(185,28,28,0.25) 0%, rgba(127,29,29,0.2) 100%) !important; border-color: #ef4444 !important; }
+        .stock-low { border-left: 4px solid #f59e0b; background: linear-gradient(90deg, #fffbeb 0%, transparent 100%) !important; }
+        body.dark .stock-low { background: linear-gradient(90deg, rgba(245,158,11,0.2) 0%, transparent 100%) !important; }
     </style>
 </head>
 <body class="text-slate-900">
@@ -43,9 +90,15 @@
                     </span>
                     <h1 class="text-xl font-black tracking-tight" data-i18n="app_title">DISPATCH SYSTEM</h1>
                 </div>
-                <button onclick="toggleLanguage()" class="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all">
-                    <i data-lucide="languages" class="w-4 h-4 text-white"></i>
-                </button>
+                <div class="flex gap-2">
+                    <button onclick="toggleDarkMode()" class="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all" title="โหมดมืด">
+                        <i data-lucide="moon" class="w-4 h-4 text-white dark-mode-icon"></i>
+                        <i data-lucide="sun" class="w-4 h-4 text-white light-mode-icon hidden"></i>
+                    </button>
+                    <button onclick="toggleLanguage()" class="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all">
+                        <i data-lucide="languages" class="w-4 h-4 text-white"></i>
+                    </button>
+                </div>
             </div>
 
             <div class="relative group">
@@ -88,6 +141,8 @@
 
                 <!-- IMPORT & STOCK VIEW -->
                 <div id="importView" class="hidden py-2 space-y-4">
+                    <input type="text" id="stockSearch" placeholder="ค้นหารหัส / ชื่อสินค้า..." 
+                        class="w-full py-2.5 px-4 rounded-xl border border-slate-200 text-sm font-bold mb-2 outline-none focus:ring-2 focus:ring-blue-200">
                     <div class="flex justify-between items-center px-1">
                         <div>
                             <h3 class="font-black text-slate-800 text-sm" data-i18n="current_stock">รายการสต็อก</h3>
@@ -139,6 +194,38 @@
                 </div>
             </div>
 
+            <!-- SUMMARY SECTION -->
+            <div id="summarySection" class="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-[2.5rem] p-5 border border-blue-100">
+                <h2 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase mb-4">
+                    <i data-lucide="bar-chart-2" class="w-4 h-4 text-blue-500"></i> สรุปวันนี้
+                </h2>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white/80 rounded-2xl p-4 text-center">
+                        <p id="summaryTodayQty" class="text-2xl font-black text-blue-600">0</p>
+                        <p class="text-[10px] font-bold text-slate-500 uppercase">รายการเบิกวันนี้</p>
+                    </div>
+                    <div class="bg-white/80 rounded-2xl p-4 text-center">
+                        <p id="summaryTodayReceipts" class="text-2xl font-black text-indigo-600">0</p>
+                        <p class="text-[10px] font-bold text-slate-500 uppercase">ใบเบิกวันนี้</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS & BACKUP -->
+            <div class="flex gap-2 flex-wrap">
+                <button onclick="exportBackup()" class="flex-1 min-w-[120px] py-3 bg-slate-100 hover:bg-slate-200 rounded-2xl text-[10px] font-black text-slate-700 flex items-center justify-center gap-2 transition-colors">
+                    <i data-lucide="download" class="w-4 h-4"></i> สำรองข้อมูล
+                </button>
+                <label class="flex-1 min-w-[120px] py-3 bg-slate-100 hover:bg-slate-200 rounded-2xl text-[10px] font-black text-slate-700 flex items-center justify-center gap-2 cursor-pointer transition-colors">
+                    <i data-lucide="upload" class="w-4 h-4"></i> กู้คืนข้อมูล
+                    <input type="file" id="restoreInput" accept=".json" class="hidden" onchange="importBackup(event)">
+                </label>
+                <button id="btnSoundToggle" onclick="toggleSound()" class="py-3 px-4 rounded-2xl text-[10px] font-black flex items-center justify-center gap-2 transition-colors" title="เสียงเมื่อสแกน">
+                    <i data-lucide="volume-2" class="w-4 h-4 sound-on"></i>
+                    <i data-lucide="volume-x" class="w-4 h-4 sound-off hidden"></i>
+                </button>
+            </div>
+
             <!-- HISTORY SECTION -->
             <div class="space-y-4">
                 <div class="flex items-center justify-between px-2">
@@ -166,11 +253,14 @@
             </div>
             
             <div class="p-6 overflow-y-auto custom-scroll">
-                <div class="flex gap-2 mb-6 shrink-0">
-                    <button id="btnExportExcel" class="flex-1 py-4 bg-green-50 text-green-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-green-100 active:scale-95 transition-transform">
+                <div class="flex gap-2 mb-4 shrink-0 flex-wrap">
+                    <button id="btnReOrder" class="flex-1 min-w-[100px] py-4 bg-blue-50 text-blue-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-blue-100 active:scale-95 transition-transform">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> สั่งซ้ำ
+                    </button>
+                    <button id="btnExportExcel" class="flex-1 min-w-[80px] py-4 bg-green-50 text-green-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-green-100 active:scale-95 transition-transform">
                         <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel
                     </button>
-                    <button id="btnExportPDF" class="flex-1 py-4 bg-red-50 text-red-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-red-100 active:scale-95 transition-transform">
+                    <button id="btnExportPDF" class="flex-1 min-w-[80px] py-4 bg-red-50 text-red-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-red-100 active:scale-95 transition-transform">
                         <i data-lucide="file-text" class="w-4 h-4"></i> PDF
                     </button>
                 </div>
@@ -202,6 +292,10 @@
         let lastScannedCode = '';
         let lastScannedTime = 0;
         const SCAN_COOLDOWN_MS = 1200;
+        const LOW_STOCK_THRESHOLD = 5;
+        const LOW_STOCK_THRESHOLD_KEY = 'lowStockThreshold';
+        let soundEnabled = localStorage.getItem('soundEnabled') !== '0';
+        let currentReceiptForReOrder = null;
 
         const translations = {
             th: {
@@ -241,6 +335,19 @@
             inventory: 'code, customer, salePart, orderNo, name, qty',
             history: '++id, receiptNo, items, rawItems, date, total'
         });
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                if (type === 'success') { osc.frequency.value = 800; osc.type = 'sine'; gain.gain.setValueAtTime(0.15, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15); }
+                else if (type === 'error') { osc.frequency.value = 400; osc.type = 'sawtooth'; gain.gain.setValueAtTime(0.1, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2); }
+                osc.start(ctx.currentTime); osc.stop(ctx.currentTime + (type === 'success' ? 0.15 : 0.2));
+            } catch (e) {}
+        }
 
         function showToast(msg, isError = false) {
             const t = document.getElementById('toast');
@@ -353,11 +460,11 @@
             if(confirm("ลบข้อมูลสต็อกทั้งหมด?")) { await db.inventory.clear(); updateStockUI(); showToast("ล้างสต็อกแล้ว"); }
         }
 
-        async function addToCart(code) {
+        async function addToCart(code, silent = false) {
             const product = await db.inventory.get(code);
-            if (!product) { showToast("ไม่พบรหัส: " + code, true); return; }
+            if (!product) { if (!silent) { showToast("ไม่พบรหัส: " + code, true); playSound('error'); } return false; }
             const countInCart = currentCart.filter(i => i.code === code).length;
-            if (countInCart >= product.qty) { showToast("สต็อกไม่พอ!", true); return; }
+            if (countInCart >= product.qty) { if (!silent) { showToast("สต็อกไม่พอ!", true); playSound('error'); } return false; }
             
             if (currentCart.length === 0) {
                 document.getElementById('tempReceiptNo').innerText = generateReceiptNo();
@@ -365,8 +472,17 @@
 
             currentCart.push({...product});
             renderCart();
-            showToast("เพิ่ม: " + product.code);
+            if (!silent) { showToast("เพิ่ม: " + product.code); playSound('success'); }
             if (window.navigator.vibrate) window.navigator.vibrate(40);
+            return true;
+        }
+
+        function removeFromCart(code) {
+            const idx = currentCart.findIndex(i => i.code === code);
+            if (idx === -1) return;
+            currentCart.splice(idx, 1);
+            renderCart();
+            if (window.navigator.vibrate) window.navigator.vibrate(20);
         }
 
         function renderCart() {
@@ -374,15 +490,29 @@
             const list = document.getElementById('cartList');
             if (!currentCart.length) { container.classList.add('hidden'); return; }
             container.classList.remove('hidden');
-            list.innerHTML = currentCart.map((item) => `
-                <div class="flex justify-between items-center bg-white/5 p-3 rounded-2xl border border-white/5">
+            const grouped = currentCart.reduce((acc, item) => {
+                if (!acc[item.code]) acc[item.code] = { ...item, qty: 0 };
+                acc[item.code].qty++; return acc;
+            }, {});
+            list.innerHTML = Object.values(grouped).map((item) => {
+                const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                return `
+                <div class="flex justify-between items-center bg-white/5 p-3 rounded-2xl border border-white/5 gap-2">
                     <div class="min-w-0 flex-1 text-left">
                         <div class="text-[8px] font-black text-blue-400 uppercase tracking-widest">${item.code}</div>
                         <div class="text-[11px] font-bold truncate pr-2 text-white">${item.name || item.code}</div>
                     </div>
-                    <div class="text-[10px] font-black text-white/40">1 PKG</div>
+                    <div class="flex items-center gap-1 shrink-0 bg-white/10 rounded-xl p-1">
+                        <button onclick="removeFromCart('${esc(item.code)}')" class="w-8 h-8 flex items-center justify-center rounded-lg bg-red-500/30 text-red-300 hover:bg-red-500/50 active:scale-95 transition-all">
+                            <i data-lucide="minus" class="w-3.5 h-3.5"></i>
+                        </button>
+                        <span class="text-[11px] font-black text-white min-w-[24px] text-center">${item.qty}</span>
+                        <button onclick="addToCart('${esc(item.code)}')" class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-500/30 text-blue-300 hover:bg-blue-500/50 active:scale-95 transition-all">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
                 </div>
-            `).join('');
+            `}).join('');
             lucide.createIcons();
         }
 
@@ -399,16 +529,19 @@
                 if(p) await db.inventory.update(code, { qty: Math.max(0, p.qty - count) });
             }
             
+            const now = new Date();
+            const dateKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             const historyItem = {
                 receiptNo: receiptNo,
                 items: currentCart.map(i => i.name || i.code).slice(0, 2).join(', ') + (currentCart.length > 2 ? '...' : ''),
                 rawItems: JSON.parse(JSON.stringify(currentCart)),
-                date: new Date().toLocaleString('th-TH'),
+                date: now.toLocaleString('th-TH'),
+                dateKey: dateKey,
                 total: currentCart.length
             };
             
             await db.history.add(historyItem);
-            currentCart = []; renderCart(); updateStockUI(); renderHistory();
+            currentCart = []; renderCart(); updateStockUI(); renderHistory(); updateSummary();
             showToast("บันทึกเบิกจ่ายสำเร็จ");
             
             // เปิดดูใบเสร็จที่เพิ่งสร้างทันที
@@ -419,17 +552,29 @@
         async function updateStockUI() {
             const list = document.getElementById('stockList');
             const counter = document.getElementById('dbCount');
+            const searchVal = (document.getElementById('stockSearch')?.value || '').trim().toLowerCase();
             const items = await db.inventory.toArray();
-            counter.innerText = `${items.length} รายการ`;
-            list.innerHTML = items.length ? items.map(i => {
+            const filtered = searchVal ? items.filter(i => 
+                String(i.code || '').toLowerCase().includes(searchVal) || 
+                String(i.name || '').toLowerCase().includes(searchVal) ||
+                String(i.orderNo || '').toLowerCase().includes(searchVal) ||
+                String(i.customer || '').toLowerCase().includes(searchVal)
+            ) : items;
+            counter.innerText = `${filtered.length} / ${items.length} รายการ`;
+            const threshold = parseInt(localStorage.getItem(LOW_STOCK_THRESHOLD_KEY)) || LOW_STOCK_THRESHOLD;
+            list.innerHTML = filtered.length ? filtered.map(i => {
                 const canAdd = i.qty > 0;
+                const isOut = i.qty === 0;
+                const isLow = i.qty > 0 && i.qty < threshold;
                 const safeCode = String(i.code).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
                 return `
-                <div data-code="${safeCode}" ${canAdd ? 'onclick="addToCart(this.dataset.code)"' : ''} class="stock-item-card flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 group transition-all hover:bg-white hover:shadow-md text-left ${!canAdd ? 'disabled' : ''}">
+                <div data-code="${safeCode}" ${canAdd ? 'onclick="addToCart(this.dataset.code)"' : ''} class="stock-item-card flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 group transition-all hover:bg-white hover:shadow-md text-left ${!canAdd ? 'disabled' : ''} ${isOut ? 'stock-out' : ''} ${isLow ? 'stock-low' : ''}">
                     <div class="flex justify-between items-start mb-1">
-                        <span class="text-[9px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded-lg">${i.code}</span>
+                        <span class="text-[9px] font-black ${isOut ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-600'} px-2 py-0.5 rounded-lg">${i.code}</span>
                         <div class="flex items-center gap-2">
-                            <span class="text-xs font-black ${i.qty === 0 ? 'text-red-500' : 'text-slate-900'}">${i.qty}</span>
+                            ${isOut ? '<span class="text-[8px] font-black bg-red-500 text-white px-2 py-0.5 rounded uppercase">หมด</span>' : ''}
+                            ${isLow ? '<span class="text-[8px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">ต่ำ</span>' : ''}
+                            <span class="text-xs font-black ${i.qty === 0 ? 'text-red-600 font-extrabold' : 'text-slate-900'}">${i.qty}</span>
                             ${canAdd ? '<i data-lucide="plus-circle" class="w-4 h-4 text-blue-500 flex-shrink-0" title="แตะเพื่อเบิก"></i>' : ''}
                         </div>
                     </div>
@@ -438,6 +583,7 @@
                         <span class="truncate">Order: ${i.orderNo || '-'}</span>
                         <span class="truncate">Cust: ${i.customer || '-'}</span>
                     </div>
+                    ${canAdd ? `<button onclick="event.stopPropagation(); showQRSticker(this.dataset.code, this.dataset.name)" data-code="${safeCode}" data-name="${String(i.name || '').replace(/"/g, '&quot;')}" class="mt-2 text-[9px] font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1" title="พิมพ์สติกเกอร์ QR"><i data-lucide="qr-code" class="w-3 h-3"></i> สติกเกอร์</button>` : ''}
                 </div>
             `}).join('') : '<div class="text-center py-10 opacity-20 text-[10px] font-black">NO STOCK</div>';
             lucide.createIcons();
@@ -463,9 +609,33 @@
             if(confirm("ล้างประวัติการเบิกทั้งหมด?")) { await db.history.clear(); renderHistory(); showToast("ล้างประวัติแล้ว"); }
         }
 
+        async function reOrderFromReceipt(receipt) {
+            if (!receipt?.rawItems?.length) return;
+            closeModal();
+            let added = 0;
+            for (const item of receipt.rawItems) {
+                if (await addToCart(item.code, true)) added++;
+            }
+            if (added > 0) playSound('success');
+            showToast(`สั่งซ้ำ ${added} รายการ`);
+        }
+
+        function showQRSticker(code, name) {
+            const url = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(code)}`;
+            const w = window.open('', '_blank', 'width=400,height=500');
+            w.document.write(`<!DOCTYPE html><html><head><title>QR - ${code}</title></head><body style="font-family:sans-serif;padding:20px;text-align:center">
+                <h3 style="margin-bottom:8px">${code}</h3>
+                <p style="font-size:12px;color:#666;margin-bottom:16px">${name || ''}</p>
+                <img src="${url}" alt="QR" style="border:1px solid #ddd;padding:10px">
+                <p style="margin-top:16px;font-size:11px;color:#999">กด Ctrl+P เพื่อพิมพ์</p>
+            </body></html>`);
+            w.document.close();
+        }
+
         async function viewReceiptDetail(id) {
             const receipt = await db.history.get(id);
             if (!receipt) return;
+            currentReceiptForReOrder = receipt;
             document.getElementById('modalReceiptNo').innerText = receipt.receiptNo || `ID: ${receipt.id}`;
             document.getElementById('modalDateTime').innerText = receipt.date;
             document.getElementById('modalTotalQty').innerText = receipt.total;
@@ -482,6 +652,7 @@
                     <div class="bg-blue-50 text-blue-600 font-black px-3 py-1 rounded-lg text-xs flex-shrink-0">x${info.count}</div>
                 </div>
             `).join('');
+            document.getElementById('btnReOrder').onclick = () => reOrderFromReceipt(receipt);
             document.getElementById('btnExportExcel').onclick = () => exportExcel(receipt);
             document.getElementById('btnExportPDF').onclick = () => exportPDF(receipt);
             const overlay = document.getElementById('modalOverlay');
@@ -577,6 +748,78 @@
             localStorage.setItem('appLang', currentLang); updateUI();
         }
 
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark', !document.body.classList.contains('dark'));
+            const isDark = document.body.classList.contains('dark');
+            localStorage.setItem('darkMode', isDark ? '1' : '0');
+            document.querySelector('.dark-mode-icon')?.classList.toggle('hidden', isDark);
+            document.querySelector('.light-mode-icon')?.classList.toggle('hidden', !isDark);
+        }
+
+        function parseDateKeyFromHistory(h) {
+            if (h.dateKey) return h.dateKey;
+            if (!h.date) return null;
+            try {
+                const datePart = String(h.date).split(',')[0].split(' ')[0].trim();
+                const parts = datePart.split('/').map(Number);
+                if (parts.length >= 3) {
+                    let y = parts[2];
+                    if (y > 2500) y -= 543;
+                    return `${y}-${String(parts[1]).padStart(2,'0')}-${String(parts[0]).padStart(2,'0')}`;
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        async function updateSummary() {
+            const now = new Date();
+            const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+            const history = await db.history.toArray();
+            const todayItemsFiltered = history.filter(h => (parseDateKeyFromHistory(h) || '') === todayKey);
+            const todayReceipts = todayItemsFiltered.length;
+            const todayQty = todayItemsFiltered.reduce((s, h) => s + (h.total || 0), 0);
+            const elQty = document.getElementById('summaryTodayQty');
+            const elReceipts = document.getElementById('summaryTodayReceipts');
+            if (elQty) elQty.innerText = todayQty;
+            if (elReceipts) elReceipts.innerText = todayReceipts;
+        }
+
+        async function exportBackup() {
+            const inventory = await db.inventory.toArray();
+            const history = await db.history.toArray();
+            const blob = new Blob([JSON.stringify({ inventory, history, exportDate: new Date().toISOString() })], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `warehouse-backup-${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            showToast('สำรองข้อมูลเรียบร้อย');
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            localStorage.setItem('soundEnabled', soundEnabled ? '1' : '0');
+            document.querySelector('.sound-on')?.classList.toggle('hidden', !soundEnabled);
+            document.querySelector('.sound-off')?.classList.toggle('hidden', soundEnabled);
+            document.getElementById('btnSoundToggle')?.classList.toggle('bg-slate-100', soundEnabled);
+            document.getElementById('btnSoundToggle')?.classList.toggle('bg-slate-300', !soundEnabled);
+            showToast(soundEnabled ? 'เปิดเสียงแล้ว' : 'ปิดเสียงแล้ว');
+        }
+
+        async function importBackup(event) {
+            const file = event.target.files[0];
+            if (!file || !confirm('จะแทนที่ข้อมูลทั้งหมดด้วยไฟล์นี้? ทำต่อหรือไม่?')) { event.target.value = ''; return; }
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                if (data.inventory?.length) { await db.inventory.clear(); await db.inventory.bulkAdd(data.inventory); }
+                if (data.history?.length) { await db.history.clear(); await db.history.bulkAdd(data.history); }
+                updateStockUI(); renderHistory(); updateSummary();
+                showToast('กู้คืนข้อมูลเรียบร้อย');
+            } catch (e) { showToast('กู้คืนไม่สำเร็จ', true); }
+            event.target.value = '';
+        }
+
         function updateUI() {
             document.querySelectorAll('[data-i18n]').forEach(el => {
                 const k = el.getAttribute('data-i18n');
@@ -585,7 +828,13 @@
             lucide.createIcons();
         }
 
-        window.onload = () => { updateUI(); updateStockUI(); renderHistory(); };
+        window.onload = () => { 
+            updateUI(); updateStockUI(); renderHistory(); updateSummary();
+            if (localStorage.getItem('darkMode') === '1') { document.body.classList.add('dark'); document.querySelector('.dark-mode-icon')?.classList.add('hidden'); document.querySelector('.light-mode-icon')?.classList.remove('hidden'); }
+            document.getElementById('stockSearch')?.addEventListener('input', () => updateStockUI());
+            if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+            if (!soundEnabled) { document.querySelector('.sound-on')?.classList.add('hidden'); document.querySelector('.sound-off')?.classList.remove('hidden'); document.getElementById('btnSoundToggle')?.classList.add('bg-slate-300'); }
+        };
         document.getElementById('modalOverlay').onclick = (e) => { if(e.target.id === 'modalOverlay') closeModal(); };
         document.getElementById('manualInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleManual(); } });
     </script>
