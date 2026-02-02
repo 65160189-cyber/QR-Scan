@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Warehouse Dispatch System - Smart Accumulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700&family=Sarabun:wght@300;400;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', 'Sarabun', sans-serif; background: #f8fafc; overscroll-behavior: none; }
+        .ios-switcher-container { position: relative; background: #f1f5f9; padding: 4px; border-radius: 18px; display: flex; width: 100%; isolation: isolate; border: 1px solid #e2e8f0; }
+        .ios-slider { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: white; border-radius: 14px; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.1); transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); z-index: 0; }
+        .ios-tab { position: relative; z-index: 1; flex: 1; padding: 12px 0; font-size: 11px; font-weight: 700; text-align: center; color: #94a3b8; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; transition: color 0.3s; }
+        .ios-tab.active { color: #2563eb; }
+        .btn-main { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 1.1rem; border-radius: 1.5rem; font-weight: 800; transition: all 0.3s; width: 100%; background: #2563eb; color: white; border: none; }
+        .btn-main:active { transform: scale(0.96); }
+        #reader { width: 100% !important; border: none !important; border-radius: 1.5rem; overflow: hidden; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .history-card { transition: all 0.2s; cursor: pointer; }
+        .history-card:active { transform: scale(0.98); background: #f1f5f9; }
+    </style>
+</head>
+<body class="text-slate-900">
+
+    <div id="app" class="max-w-md mx-auto min-h-screen flex flex-col relative pb-10">
+        <!-- HEADER -->
+        <header class="p-6 pb-8 rounded-b-[3rem] shadow-xl sticky top-0 z-50 bg-gradient-to-br from-blue-600 to-blue-700">
+            <div class="flex items-center justify-between text-white mb-6">
+                <div class="flex-1">
+                    <span class="text-[9px] font-black uppercase opacity-80 tracking-widest flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span> <span>คลังสินค้า (Kaban Support)</span>
+                    </span>
+                    <h1 class="text-xl font-black tracking-tight" data-i18n="app_title">DISPATCH SYSTEM</h1>
+                </div>
+                <button onclick="toggleLanguage()" class="w-9 h-9 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all">
+                    <i data-lucide="languages" class="w-4 h-4 text-white"></i>
+                </button>
+            </div>
+
+            <div class="relative group">
+                <input type="text" id="manualInput" placeholder="สแกน Kaban ID..." autocomplete="off" 
+                    class="w-full bg-white/10 text-white placeholder:text-white/50 rounded-2xl py-4 pl-12 pr-4 outline-none font-bold text-lg backdrop-blur-sm focus:bg-white/20 transition-all">
+                <i data-lucide="keyboard" class="w-5 h-5 text-white/50 absolute left-4 top-1/2 -translate-y-1/2"></i>
+                <button onclick="handleManual()" class="absolute right-2 top-1/2 -translate-y-1/2 bg-white text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black shadow-lg">
+                    เพิ่ม
+                </button>
+            </div>
+        </header>
+
+        <main class="p-6 space-y-6">
+            <!-- MODE SWITCHER -->
+            <div class="ios-switcher-container shadow-sm">
+                <div id="modeSlider" class="ios-slider"></div>
+                <div onclick="switchMode('scan')" id="tabScan" class="ios-tab active">
+                    <i data-lucide="scan" class="w-4 h-4"></i> <span data-i18n="tab_scan">สแกนเบิกจ่าย</span>
+                </div>
+                <div onclick="switchMode('import')" id="tabImport" class="ios-tab">
+                    <i data-lucide="database" class="w-4 h-4"></i> <span data-i18n="tab_stock">ฐานข้อมูลสินค้า</span>
+                </div>
+            </div>
+
+            <!-- MAIN VIEW CONTAINER -->
+            <div class="bg-white rounded-[2.5rem] p-5 shadow-sm border border-slate-200 min-h-[250px] flex flex-col relative overflow-hidden">
+                <!-- SCAN VIEW -->
+                <div id="scanView" class="space-y-5">
+                    <div class="aspect-square bg-slate-50 rounded-[2rem] overflow-hidden relative flex items-center justify-center border-2 border-dashed border-slate-200">
+                        <div id="reader"></div>
+                        <div id="scanPlaceholder" class="absolute text-center opacity-30">
+                            <i data-lucide="qr-code" class="w-12 h-12 mx-auto mb-2 text-blue-600"></i>
+                            <p class="text-[10px] font-black uppercase" data-i18n="wait_scan">วาง QR / Barcode ในกรอบ</p>
+                        </div>
+                    </div>
+                    <button id="btnToggleCam" onclick="toggleCamera()" class="btn-main shadow-lg shadow-blue-100">
+                        <i data-lucide="camera"></i> <span data-i18n="btn_open_camera">เปิดกล้องสแกน</span>
+                    </button>
+                </div>
+
+                <!-- IMPORT & STOCK VIEW -->
+                <div id="importView" class="hidden py-2 space-y-4">
+                    <div class="flex justify-between items-center px-1">
+                        <div>
+                            <h3 class="font-black text-slate-800 text-sm" data-i18n="current_stock">รายการสต็อก</h3>
+                            <p id="dbCount" class="text-[9px] text-slate-400 font-bold">0 รายการ</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="clearDatabase()" class="bg-red-50 text-red-500 p-2 rounded-xl border border-red-100 hover:bg-red-100 transition-colors">
+                                <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            </button>
+                            <label class="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black cursor-pointer shadow-md hover:bg-blue-700 transition-colors">
+                                <i data-lucide="plus-circle" class="inline w-3 h-3 mr-1"></i> <span data-i18n="btn_import">เติมสต็อก (Excel)</span>
+                                <input type="file" id="excelInput" accept=".xlsx, .xls" class="hidden" onchange="handleExcelFile(event)">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="importPreview" class="hidden bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3 animate-in fade-in zoom-in duration-300">
+                        <div class="flex justify-between items-center border-b border-blue-100 pb-2">
+                            <div>
+                                <span class="text-[10px] font-black text-blue-700 uppercase">ตรวจพบข้อมูลใหม่</span>
+                                <p id="previewRows" class="text-[8px] text-blue-500 font-bold"></p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="cancelImport()" class="text-slate-400 text-[10px] font-bold" data-i18n="btn_cancel">ยกเลิก</button>
+                                <button onclick="confirmImport()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-[10px] font-black shadow-sm" data-i18n="btn_confirm">ยืนยันเติมสต็อก</button>
+                            </div>
+                        </div>
+                        <div id="previewList" class="max-h-[120px] overflow-y-auto text-[10px] font-bold text-blue-900 space-y-1 custom-scroll"></div>
+                    </div>
+
+                    <div id="stockList" class="max-h-[350px] overflow-y-auto space-y-2 custom-scroll pr-1"></div>
+                </div>
+            </div>
+
+            <!-- CART SECTION -->
+            <div id="cartSection" class="hidden space-y-4">
+                <div class="bg-slate-900 text-white rounded-[2.5rem] p-6 shadow-xl">
+                    <div class="flex justify-between items-center mb-4">
+                        <div class="flex flex-col">
+                            <h4 class="text-[8px] font-black uppercase tracking-widest text-blue-400">ใบเบิกปัจจุบัน</h4>
+                            <span id="tempReceiptNo" class="text-xs font-mono font-black text-white/40 tracking-tighter">--</span>
+                        </div>
+                        <button onclick="clearCart()" class="text-[9px] font-black text-red-400 uppercase hover:text-red-300">ล้างทั้งหมด</button>
+                    </div>
+                    <div id="cartList" class="space-y-2 mb-6 max-h-[200px] overflow-y-auto pr-2 custom-scroll"></div>
+                    <button onclick="confirmReceipt()" class="btn-main bg-blue-600 hover:bg-blue-500 shadow-blue-900/50">
+                        <i data-lucide="send"></i> <span data-i18n="btn_finalize_receipt">บันทึกเบิกจ่าย</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- HISTORY SECTION -->
+            <div class="space-y-4">
+                <div class="flex items-center justify-between px-2">
+                    <h2 class="font-black text-slate-800 flex items-center gap-2 text-sm uppercase">
+                        <i data-lucide="clock" class="w-4 h-4 text-blue-500"></i> <span data-i18n="history_title">ประวัติล่าสุด</span>
+                    </h2>
+                    <button onclick="clearHistory()" class="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-red-500">ล้างประวัติ</button>
+                </div>
+                <div id="historyContainer" class="space-y-3"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- RECEIPT DETAIL MODAL -->
+    <div id="modalOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-end justify-center opacity-0 pointer-events-none p-4 transition-opacity duration-300">
+        <div id="modalContent" class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden translate-y-full max-h-[90vh] flex flex-col transition-transform duration-300">
+            <div class="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center shrink-0">
+                <div>
+                    <h3 id="modalReceiptNo" class="text-lg font-black font-mono text-blue-600 tracking-tighter">RE-XXXX</h3>
+                    <p id="modalDateTime" class="text-[10px] font-bold text-slate-400">Date | Time</p>
+                </div>
+                <button onclick="closeModal()" class="w-10 h-10 bg-white border border-slate-100 rounded-xl flex items-center justify-center shadow-sm">
+                    <i data-lucide="x" class="w-5 h-5 text-slate-400"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto custom-scroll">
+                <div class="flex gap-2 mb-6 shrink-0">
+                    <button id="btnExportExcel" class="flex-1 py-4 bg-green-50 text-green-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-green-100 active:scale-95 transition-transform">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Excel
+                    </button>
+                    <button id="btnExportPDF" class="flex-1 py-4 bg-red-50 text-red-700 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase border border-red-100 active:scale-95 transition-transform">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> PDF
+                    </button>
+                </div>
+
+                <div id="modalItemList" class="space-y-3"></div>
+                
+                <div class="mt-6 pt-6 border-t border-slate-100 flex justify-between items-center">
+                    <span class="text-xs font-black text-slate-400 uppercase tracking-widest">รวมจำนวนเบิก</span>
+                    <span id="modalTotalQty" class="text-xl font-black text-slate-900">0</span>
+                </div>
+                <button onclick="closeModal()" class="btn-main mt-6 bg-slate-900 shadow-none">
+                    ตกลง
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTIFICATION TOAST -->
+    <div id="toast" class="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-4 rounded-3xl text-xs font-bold shadow-2xl opacity-0 translate-y-10 transition-all duration-300 z-[200] pointer-events-none text-center min-w-[200px]">
+        สำเร็จ
+    </div>
+
+    <script>
+        let pendingImportData = [];
+        let currentLang = localStorage.getItem('appLang') || 'th';
+        let currentCart = [];
+        let isCamOpen = false;
+        let scannerObj = null;
+        let lastScannedCode = '';
+        let lastScannedTime = 0;
+        const SCAN_COOLDOWN_MS = 1200;
+
+        const translations = {
+            th: {
+                app_title: "ระบบส่งสินค้า",
+                tab_scan: "สแกนเบิกจ่าย",
+                tab_stock: "ฐานข้อมูลสินค้า",
+                wait_scan: "วาง QR / Barcode ในกรอบ",
+                btn_open_camera: "เปิดกล้องสแกน",
+                btn_close_camera: "ปิดกล้อง",
+                current_stock: "รายการสต็อก",
+                btn_import: "เติมสต็อก (Excel)",
+                preview_title: "ข้อมูลที่พบ",
+                btn_cancel: "ยกเลิก",
+                btn_confirm: "ยืนยันเติมสต็อก",
+                history_title: "ประวัติล่าสุด",
+                btn_finalize_receipt: "บันทึกเบิกจ่าย"
+            },
+            en: {
+                app_title: "DISPATCH SYSTEM",
+                tab_scan: "Scan",
+                tab_stock: "Inventory",
+                wait_scan: "Place code in frame",
+                btn_open_camera: "Open Camera",
+                btn_close_camera: "Close Camera",
+                current_stock: "Stock List",
+                btn_import: "Refill Stock",
+                preview_title: "Data Found",
+                btn_cancel: "Cancel",
+                btn_confirm: "Confirm Refill",
+                history_title: "History",
+                btn_finalize_receipt: "Save Dispatch"
+            }
+        };
+
+        const db = new Dexie("WarehouseDB");
+        db.version(3).stores({
+            inventory: 'code, customer, salePart, orderNo, name, qty',
+            history: '++id, receiptNo, items, rawItems, date, total'
+        });
+
+        function showToast(msg, isError = false) {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.backgroundColor = isError ? '#ef4444' : '#0f172a';
+            t.classList.replace('opacity-0', 'opacity-100');
+            t.classList.replace('translate-y-10', 'translate-y-0');
+            setTimeout(() => {
+                t.classList.replace('opacity-100', 'opacity-0');
+                t.classList.replace('translate-y-0', 'translate-y-10');
+            }, 3000);
+        }
+
+        function generateReceiptNo() {
+            const now = new Date();
+            const datePart = now.getFullYear().toString().slice(-2) + 
+                            (now.getMonth() + 1).toString().padStart(2, '0') + 
+                            now.getDate().toString().padStart(2, '0');
+            const randomPart = Math.floor(1000 + Math.random() * 9000);
+            return `RE${datePart}-${randomPart}`;
+        }
+
+        function cleanKey(str) {
+            if (!str) return "";
+            return String(str).toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+        }
+
+        function findKey(row, targets) {
+            const keys = Object.keys(row);
+            const normalizedTargets = targets.map(t => cleanKey(t));
+            for (let target of normalizedTargets) {
+                const found = keys.find(k => cleanKey(k) === target);
+                if (found) return found;
+            }
+            return null;
+        }
+
+        function handleExcelFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+                    if (jsonData.length === 0) { showToast("ไม่พบข้อมูลในไฟล์ Excel", true); return; }
+                    const sample = jsonData[0];
+                    const keyMap = {
+                        code: findKey(sample, ["kanbanid", "kabanid", "kaban", "code", "รหัส", "partno"]),
+                        customer: findKey(sample, ["customer", "ลูกค้า", "cust"]),
+                        salePart: findKey(sample, ["salepart", "saleno"]),
+                        orderNo: findKey(sample, ["orderno", "order"]),
+                        name: findKey(sample, ["partname", "name", "รายการ", "ชื่อสินค้า"]),
+                        qty: findKey(sample, ["qty", "quantity", "จำนวน"])
+                    };
+                    pendingImportData = jsonData.map(row => ({
+                        code: String(row[keyMap.code] || "").trim().toUpperCase(),
+                        customer: String(row[keyMap.customer] || "").trim(),
+                        salePart: String(row[keyMap.salePart] || "").trim(),
+                        orderNo: String(row[keyMap.orderNo] || "").trim(),
+                        name: String(row[keyMap.name] || "").trim(),
+                        qty: parseInt(row[keyMap.qty]) || 0
+                    })).filter(item => item.code !== "");
+                    if (pendingImportData.length > 0) {
+                        document.getElementById('importPreview').classList.remove('hidden');
+                        document.getElementById('previewRows').innerText = `ตรวจพบทั้งหมด ${pendingImportData.length} แถว`;
+                        document.getElementById('previewList').innerHTML = pendingImportData.slice(0, 5).map(p => 
+                            `<div class="flex justify-between border-b border-blue-200/30 py-1">
+                                <span class="truncate pr-2">[${p.code}] ${p.name || 'N/A'}</span>
+                                <span class="flex-shrink-0 text-blue-600 font-black">+ ${p.qty}</span>
+                            </div>`
+                        ).join('');
+                        lucide.createIcons();
+                    }
+                } catch (err) { showToast("เกิดข้อผิดพลาดในการอ่านไฟล์", true); }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function confirmImport() {
+            try {
+                let addedCount = 0; let updatedCount = 0;
+                for (let newItem of pendingImportData) {
+                    const existingItem = await db.inventory.get(newItem.code);
+                    if (existingItem) {
+                        await db.inventory.update(newItem.code, { 
+                            qty: (existingItem.qty || 0) + newItem.qty,
+                            customer: newItem.customer || existingItem.customer,
+                            salePart: newItem.salePart || existingItem.salePart,
+                            orderNo: newItem.orderNo || existingItem.orderNo,
+                            name: newItem.name || existingItem.name
+                        });
+                        updatedCount++;
+                    } else { await db.inventory.put(newItem); addedCount++; }
+                }
+                showToast(`เติมสต็อกสำเร็จ! (+${updatedCount} เดิม, +${addedCount} ใหม่)`);
+                cancelImport(); updateStockUI();
+            } catch (err) { showToast("บันทึกไม่สำเร็จ", true); }
+        }
+
+        function cancelImport() {
+            pendingImportData = [];
+            document.getElementById('importPreview').classList.add('hidden');
+            document.getElementById('excelInput').value = '';
+        }
+
+        async function clearDatabase() {
+            if(confirm("ลบข้อมูลสต็อกทั้งหมด?")) { await db.inventory.clear(); updateStockUI(); showToast("ล้างสต็อกแล้ว"); }
+        }
+
+        async function addToCart(code) {
+            const product = await db.inventory.get(code);
+            if (!product) { showToast("ไม่พบรหัส: " + code, true); return; }
+            const countInCart = currentCart.filter(i => i.code === code).length;
+            if (countInCart >= product.qty) { showToast("สต็อกไม่พอ!", true); return; }
+            
+            if (currentCart.length === 0) {
+                document.getElementById('tempReceiptNo').innerText = generateReceiptNo();
+            }
+
+            currentCart.push({...product});
+            renderCart();
+            showToast("เพิ่ม: " + product.code);
+            if (window.navigator.vibrate) window.navigator.vibrate(40);
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cartSection');
+            const list = document.getElementById('cartList');
+            if (!currentCart.length) { container.classList.add('hidden'); return; }
+            container.classList.remove('hidden');
+            list.innerHTML = currentCart.map((item) => `
+                <div class="flex justify-between items-center bg-white/5 p-3 rounded-2xl border border-white/5">
+                    <div class="min-w-0 flex-1 text-left">
+                        <div class="text-[8px] font-black text-blue-400 uppercase tracking-widest">${item.code}</div>
+                        <div class="text-[11px] font-bold truncate pr-2 text-white">${item.name || item.code}</div>
+                    </div>
+                    <div class="text-[10px] font-black text-white/40">1 PKG</div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function clearCart() {
+            if(confirm("ล้างรายการเบิกทั้งหมด?")) { currentCart = []; renderCart(); }
+        }
+
+        async function confirmReceipt() {
+            if(!currentCart.length) return;
+            const receiptNo = document.getElementById('tempReceiptNo').innerText;
+            const grouped = currentCart.reduce((acc, item) => { acc[item.code] = (acc[item.code] || 0) + 1; return acc; }, {});
+            for(const [code, count] of Object.entries(grouped)) {
+                const p = await db.inventory.get(code);
+                if(p) await db.inventory.update(code, { qty: Math.max(0, p.qty - count) });
+            }
+            
+            const historyItem = {
+                receiptNo: receiptNo,
+                items: currentCart.map(i => i.name || i.code).slice(0, 2).join(', ') + (currentCart.length > 2 ? '...' : ''),
+                rawItems: JSON.parse(JSON.stringify(currentCart)),
+                date: new Date().toLocaleString('th-TH'),
+                total: currentCart.length
+            };
+            
+            await db.history.add(historyItem);
+            currentCart = []; renderCart(); updateStockUI(); renderHistory();
+            showToast("บันทึกเบิกจ่ายสำเร็จ");
+            
+            // เปิดดูใบเสร็จที่เพิ่งสร้างทันที
+            const lastId = await db.history.orderBy('id').last();
+            viewReceiptDetail(lastId.id);
+        }
+
+        async function updateStockUI() {
+            const list = document.getElementById('stockList');
+            const counter = document.getElementById('dbCount');
+            const items = await db.inventory.toArray();
+            counter.innerText = `${items.length} รายการ`;
+            list.innerHTML = items.length ? items.map(i => `
+                <div class="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 group transition-all hover:bg-white hover:shadow-md text-left">
+                    <div class="flex justify-between mb-1">
+                        <span class="text-[9px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded-lg">${i.code}</span>
+                        <span class="text-xs font-black ${i.qty === 0 ? 'text-red-500' : 'text-slate-900'}">${i.qty}</span>
+                    </div>
+                    <div class="text-[11px] font-bold text-slate-800 truncate">${i.name || 'N/A'}</div>
+                    <div class="text-[8px] text-slate-400 font-bold flex gap-2 mt-1">
+                        <span class="truncate">Order: ${i.orderNo || '-'}</span>
+                        <span class="truncate">Cust: ${i.customer || '-'}</span>
+                    </div>
+                </div>
+            `).join('') : '<div class="text-center py-10 opacity-20 text-[10px] font-black">NO STOCK</div>';
+        }
+
+        async function renderHistory() {
+            const h = await db.history.reverse().limit(10).toArray();
+            document.getElementById('historyContainer').innerHTML = h.map(i => `
+                <div onclick="viewReceiptDetail(${i.id})" class="history-card bg-white p-4 rounded-3xl border border-slate-100 flex justify-between items-center shadow-sm">
+                    <div class="text-left">
+                        <div class="text-[8px] text-slate-400 font-black mb-0.5 uppercase tracking-tighter">
+                            ${i.receiptNo || 'RE-XXXX'} | ${i.date}
+                        </div>
+                        <div class="text-xs font-bold text-slate-700 truncate max-w-[180px]">${i.items}</div>
+                    </div>
+                    <div class="bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-black shrink-0">x${i.total}</div>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        async function clearHistory() {
+            if(confirm("ล้างประวัติการเบิกทั้งหมด?")) { await db.history.clear(); renderHistory(); showToast("ล้างประวัติแล้ว"); }
+        }
+
+        async function viewReceiptDetail(id) {
+            const receipt = await db.history.get(id);
+            if (!receipt) return;
+            document.getElementById('modalReceiptNo').innerText = receipt.receiptNo || `ID: ${receipt.id}`;
+            document.getElementById('modalDateTime').innerText = receipt.date;
+            document.getElementById('modalTotalQty').innerText = receipt.total;
+            const grouped = receipt.rawItems.reduce((acc, item) => {
+                if (!acc[item.code]) acc[item.code] = { name: item.name, count: 0 };
+                acc[item.code].count++; return acc;
+            }, {});
+            document.getElementById('modalItemList').innerHTML = Object.entries(grouped).map(([code, info]) => `
+                <div class="flex justify-between items-center py-3 border-b border-slate-50 text-left">
+                    <div class="min-w-0 flex-1 pr-4">
+                        <p class="text-[9px] font-black text-blue-500 uppercase tracking-wider">${code}</p>
+                        <p class="text-xs font-bold text-slate-800 truncate">${info.name || 'N/A'}</p>
+                    </div>
+                    <div class="bg-blue-50 text-blue-600 font-black px-3 py-1 rounded-lg text-xs flex-shrink-0">x${info.count}</div>
+                </div>
+            `).join('');
+            document.getElementById('btnExportExcel').onclick = () => exportExcel(receipt);
+            document.getElementById('btnExportPDF').onclick = () => exportPDF(receipt);
+            const overlay = document.getElementById('modalOverlay');
+            overlay.classList.remove('pointer-events-none'); overlay.style.opacity = '1';
+            document.getElementById('modalContent').style.transform = 'translateY(0)';
+            lucide.createIcons();
+        }
+
+        function closeModal() {
+            const overlay = document.getElementById('modalOverlay');
+            overlay.style.opacity = '0'; document.getElementById('modalContent').style.transform = 'translateY(100%)';
+            setTimeout(() => overlay.classList.add('pointer-events-none'), 300);
+        }
+
+        function exportExcel(receipt) {
+            const rows = receipt.rawItems.map(i => ({
+                ReceiptNo: receipt.receiptNo, Date: receipt.date, Code: i.code, Name: i.name, Customer: i.customer, Order: i.orderNo
+            }));
+            const ws = XLSX.utils.json_to_sheet(rows);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Receipt");
+            XLSX.writeFile(wb, `${receipt.receiptNo || 'Receipt'}.xlsx`);
+        }
+
+        function exportPDF(receipt) {
+            const { jsPDF } = window.jspdf; const doc = new jsPDF();
+            doc.setFontSize(18); doc.text("DISPATCH RECEIPT", 14, 20);
+            doc.setFontSize(10); doc.text(`Receipt No: ${receipt.receiptNo || '-'}`, 14, 30);
+            doc.text(`Date: ${receipt.date}`, 14, 35);
+            const grouped = receipt.rawItems.reduce((acc, item) => {
+                if (!acc[item.code]) acc[item.code] = { name: item.name, count: 0 };
+                acc[item.code].count++; return acc;
+            }, {});
+            const tableData = Object.entries(grouped).map(([code, info]) => [code, (info.name || 'N/A').replace(/[^\x00-\x7F]/g, "?"), info.count]);
+            doc.autoTable({ startY: 45, head: [['Code', 'Name (EN/Filter)', 'Qty']], body: tableData });
+            doc.save(`${receipt.receiptNo || 'Receipt'}.pdf`);
+            showToast("ส่งออก PDF แล้ว (จำกัดฟอนต์ไทย)");
+        }
+
+        async function toggleCamera() {
+            const btn = document.getElementById('btnToggleCam');
+            const placeholder = document.getElementById('scanPlaceholder');
+            if (isCamOpen) {
+                if(scannerObj) await scannerObj.stop();
+                isCamOpen = false;
+                btn.innerHTML = `<i data-lucide="camera"></i> <span data-i18n="btn_open_camera">เปิดกล้องสแกน</span>`;
+                placeholder.classList.remove('hidden');
+            } else {
+                isCamOpen = true;
+                btn.innerHTML = `<i data-lucide="camera-off"></i> <span data-i18n="btn_close_camera">ปิดกล้อง</span>`;
+                placeholder.classList.add('hidden');
+                scannerObj = new Html5Qrcode("reader");
+                scannerObj.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, (txt) => {
+                    const code = txt.trim().toUpperCase();
+                    if (!code) return;
+                    const now = Date.now();
+                    if (code === lastScannedCode && (now - lastScannedTime) < SCAN_COOLDOWN_MS) return;
+                    lastScannedCode = code; lastScannedTime = now;
+                    addToCart(code);
+                }).catch(() => {
+                    showToast("เปิดกล้องไม่ได้", true); isCamOpen = false;
+                });
+            }
+            lucide.createIcons();
+        }
+
+        async function switchMode(m) {
+            document.getElementById('modeSlider').style.transform = `translateX(${m === 'scan' ? '0' : '100'}%)`;
+            document.getElementById('tabScan').classList.toggle('active', m === 'scan');
+            document.getElementById('tabImport').classList.toggle('active', m === 'import');
+            document.getElementById('scanView').classList.toggle('hidden', m !== 'scan');
+            document.getElementById('importView').classList.toggle('hidden', m !== 'import');
+            if (m === 'import') {
+                if (isCamOpen && scannerObj) {
+                    try { await scannerObj.stop(); } catch (e) {}
+                    isCamOpen = false;
+                    const btn = document.getElementById('btnToggleCam');
+                    btn.innerHTML = `<i data-lucide="camera"></i> <span data-i18n="btn_open_camera">เปิดกล้องสแกน</span>`;
+                    document.getElementById('scanPlaceholder').classList.remove('hidden');
+                    lucide.createIcons();
+                }
+                updateStockUI();
+            }
+        }
+
+        function handleManual() {
+            const el = document.getElementById('manualInput');
+            if(el.value.trim()) { addToCart(el.value.trim().toUpperCase()); el.value = ''; }
+        }
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'th' ? 'en' : 'th';
+            localStorage.setItem('appLang', currentLang); updateUI();
+        }
+
+        function updateUI() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const k = el.getAttribute('data-i18n');
+                if(translations[currentLang][k]) el.innerText = translations[currentLang][k];
+            });
+            lucide.createIcons();
+        }
+
+        window.onload = () => { updateUI(); updateStockUI(); renderHistory(); };
+        document.getElementById('modalOverlay').onclick = (e) => { if(e.target.id === 'modalOverlay') closeModal(); };
+        document.getElementById('manualInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); handleManual(); } });
+    </script>
+</body>
+</html>
