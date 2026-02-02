@@ -26,6 +26,9 @@
         .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
         .history-card { transition: all 0.2s; cursor: pointer; }
         .history-card:active { transform: scale(0.98); background: #f1f5f9; }
+        .stock-item-card { transition: all 0.2s; cursor: pointer; }
+        .stock-item-card:active { transform: scale(0.98); background: white; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15); }
+        .stock-item-card.disabled { cursor: not-allowed; opacity: 0.6; }
     </style>
 </head>
 <body class="text-slate-900">
@@ -418,11 +421,17 @@
             const counter = document.getElementById('dbCount');
             const items = await db.inventory.toArray();
             counter.innerText = `${items.length} รายการ`;
-            list.innerHTML = items.length ? items.map(i => `
-                <div class="flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 group transition-all hover:bg-white hover:shadow-md text-left">
-                    <div class="flex justify-between mb-1">
+            list.innerHTML = items.length ? items.map(i => {
+                const canAdd = i.qty > 0;
+                const safeCode = String(i.code).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                return `
+                <div data-code="${safeCode}" ${canAdd ? 'onclick="addToCart(this.dataset.code)"' : ''} class="stock-item-card flex flex-col p-4 bg-slate-50 rounded-2xl border border-slate-100 group transition-all hover:bg-white hover:shadow-md text-left ${!canAdd ? 'disabled' : ''}">
+                    <div class="flex justify-between items-start mb-1">
                         <span class="text-[9px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded-lg">${i.code}</span>
-                        <span class="text-xs font-black ${i.qty === 0 ? 'text-red-500' : 'text-slate-900'}">${i.qty}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-black ${i.qty === 0 ? 'text-red-500' : 'text-slate-900'}">${i.qty}</span>
+                            ${canAdd ? '<i data-lucide="plus-circle" class="w-4 h-4 text-blue-500 flex-shrink-0" title="แตะเพื่อเบิก"></i>' : ''}
+                        </div>
                     </div>
                     <div class="text-[11px] font-bold text-slate-800 truncate">${i.name || 'N/A'}</div>
                     <div class="text-[8px] text-slate-400 font-bold flex gap-2 mt-1">
@@ -430,7 +439,8 @@
                         <span class="truncate">Cust: ${i.customer || '-'}</span>
                     </div>
                 </div>
-            `).join('') : '<div class="text-center py-10 opacity-20 text-[10px] font-black">NO STOCK</div>';
+            `}).join('') : '<div class="text-center py-10 opacity-20 text-[10px] font-black">NO STOCK</div>';
+            lucide.createIcons();
         }
 
         async function renderHistory() {
