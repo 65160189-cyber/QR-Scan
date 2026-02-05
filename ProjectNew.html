@@ -3,394 +3,578 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Warehouse Smart Dashboard</title>
+    <title>Warehouse Smart Dashboard | TGT3 Invoice Support</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
-        body { font-family: 'Sarabun', sans-serif; }
-        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(8px); }
-        .dark .glass-card { background: rgba(30, 41, 59, 0.8); }
-        .sidebar-btn-active { background-color: #3b82f6; color: white !important; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3); }
-        .nav-btn-active { color: #3b82f6 !important; }
+        body { font-family: 'Sarabun', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); }
+        .dark .glass-card { background: rgba(15, 23, 42, 0.8); }
+        .sidebar-btn-active { background: #3b82f6; color: white !important; }
         .btn-primary { background-color: #3b82f6; color: white; transition: all 0.2s; }
-        .btn-primary:hover { background-color: #2563eb; transform: translateY(-1px); }
         @media (min-width: 768px) { .main-content { margin-left: 280px; } }
+        .loading-spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        @media print {
+            body * { visibility: hidden; }
+            #invoice-print-area, #invoice-print-area * { visibility: visible; }
+            #invoice-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+            .no-print { display: none !important; }
+        }
     </style>
     <script>
-        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { primary: '#3b82f6' } } } }
+        tailwind.config = { darkMode: 'class', theme: { extend: { colors: { primary: '#3b82f6', accent: '#10b981' } } } }
     </script>
 </head>
 <body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen transition-colors duration-300">
 
-    <!-- Navigation สำหรับมือถือ -->
-    <nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-around items-center py-3 z-50 md:hidden">
-        <button onclick="showTab('dashboard')" class="flex flex-col items-center gap-1 text-slate-400 nav-btn" id="m-nav-dashboard">
-            <i data-lucide="layout-dashboard" class="w-6 h-6"></i>
-            <span class="text-[10px]">หน้าหลัก</span>
-        </button>
-        <button onclick="showTab('stock')" class="flex flex-col items-center gap-1 text-slate-400 nav-btn" id="m-nav-stock">
-            <i data-lucide="package" class="w-6 h-6"></i>
-            <span class="text-[10px]">คลังสินค้า</span>
-        </button>
-        <button onclick="showTab('history')" class="flex flex-col items-center gap-1 text-slate-400 nav-btn" id="m-nav-history">
-            <i data-lucide="history" class="w-6 h-6"></i>
-            <span class="text-[10px]">ประวัติ</span>
-        </button>
-    </nav>
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 z-[200] hidden bg-slate-950/80 backdrop-blur-md flex flex-col items-center justify-center text-white">
+        <div class="loading-spinner mb-4"></div>
+        <h3 class="text-2xl font-black mb-2 tracking-tight">Processing...</h3>
+        <p id="loading-progress" class="text-primary font-bold">0%</p>
+    </div>
 
-    <!-- Sidebar สำหรับ Desktop -->
+    <!-- Custom Confirm Modal -->
+    <div id="confirm-modal" class="fixed inset-0 z-[300] hidden bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl text-center">
+            <div class="w-20 h-20 bg-rose-100 dark:bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i data-lucide="alert-triangle" class="w-10 h-10"></i>
+            </div>
+            <h3 class="text-2xl font-black mb-2">ล้างข้อมูลทั้งหมด?</h3>
+            <p class="text-slate-500 dark:text-slate-400 text-sm mb-8 font-medium">ข้อมูล Order และประวัติทั้งหมดจะถูกลบถาวร ไม่สามารถกู้คืนได้</p>
+            <div class="flex flex-col gap-3">
+                <button id="btn-confirm-delete" class="w-full bg-rose-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-rose-600 transition-colors">ยืนยันการลบ</button>
+                <button onclick="closeModal('confirm-modal')" class="w-full py-4 text-slate-400 font-bold">ยกเลิก</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[100] hidden">
+        <div class="px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-bold border bg-white dark:bg-slate-800">
+            <span id="toast-msg"></span>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
     <aside class="hidden md:flex fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex-col p-6 z-50">
         <div class="flex items-center gap-3 mb-10 px-2">
-            <div class="bg-primary p-2.5 rounded-xl text-white shadow-lg shadow-primary/20">
-                <i data-lucide="warehouse" class="w-6 h-6"></i>
-            </div>
-            <h1 class="font-bold text-xl tracking-tight">Warehouse Smart</h1>
+            <div class="bg-primary p-2.5 rounded-2xl text-white"><i data-lucide="warehouse" class="w-6 h-6"></i></div>
+            <h1 class="font-black text-xl tracking-tighter">WAREHOUSE <span class="text-primary font-light">TGT3</span></h1>
         </div>
-        <nav class="flex-1 space-y-2">
-            <button onclick="showTab('dashboard')" id="d-nav-dashboard" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all font-bold">
-                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
-                <span>หน้าหลัก Dashboard</span>
-            </button>
-            <button onclick="showTab('stock')" id="d-nav-stock" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all font-bold">
-                <i data-lucide="package" class="w-5 h-5"></i>
-                <span>จัดการคลัง & นำเข้า</span>
-            </button>
-            <button onclick="showTab('history')" id="d-nav-history" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all font-bold">
-                <i data-lucide="history" class="w-5 h-5"></i>
-                <span>ประวัติการส่ง</span>
-            </button>
+        <nav class="flex-1 space-y-2 text-sm font-bold">
+            <button onclick="showTab('dashboard')" id="d-nav-dashboard" class="w-full flex items-center gap-3 px-4 py-4 rounded-2xl text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left"><i data-lucide="layout-dashboard" class="w-5 h-5"></i><span>Dashboard</span></button>
+            <button onclick="showTab('dispatch')" id="d-nav-dispatch" class="w-full flex items-center gap-3 px-4 py-4 rounded-2xl text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left"><i data-lucide="truck" class="w-5 h-5"></i><span>Dispatch Center</span></button>
+            <button onclick="showTab('stock')" id="d-nav-stock" class="w-full flex items-center gap-3 px-4 py-4 rounded-2xl text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left"><i data-lucide="package" class="w-5 h-5"></i><span>Inventory</span></button>
+            <button onclick="showTab('history')" id="d-nav-history" class="w-full flex items-center gap-3 px-4 py-4 rounded-2xl text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all text-left"><i data-lucide="history" class="w-5 h-5"></i><span>History</span></button>
         </nav>
-        <div class="pt-6 border-t border-slate-100 dark:border-slate-800">
-            <button onclick="toggleTheme()" class="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 transition-all">
-                <span class="text-sm font-bold">โหมดกลางคืน</span>
-                <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
-                <i data-lucide="moon" class="w-5 h-5 block dark:hidden text-slate-400"></i>
-            </button>
-        </div>
+        <button onclick="toggleTheme()" class="w-full flex items-center justify-between px-4 py-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <span class="text-xs font-black uppercase tracking-wider">Theme</span>
+            <i data-lucide="sun" class="w-5 h-5 hidden dark:block text-yellow-400"></i><i data-lucide="moon" class="w-5 h-5 block dark:hidden text-slate-400"></i>
+        </button>
     </aside>
 
     <main class="main-content min-h-screen p-4 md:p-10 pb-24 md:pb-10">
-        <!-- DASHBOARD SECTION -->
-        <section id="tab-dashboard" class="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-            <div>
-                <h2 class="text-4xl font-black tracking-tight">รายการจัดส่ง</h2>
-                <p class="text-slate-500 text-sm mt-2" id="current-date-display"></p>
+        
+        <!-- DASHBOARD -->
+        <section id="tab-dashboard" class="space-y-8 animate-in fade-in">
+            <div class="flex justify-between items-start">
+                <div><h2 class="text-4xl md:text-5xl font-black tracking-tight">System <span class="text-primary">Overview</span></h2><p class="text-slate-400 text-sm font-bold mt-2" id="current-date-display"></p></div>
             </div>
-
-            <!-- สรุปสถิติ -->
-            <div class="grid grid-cols-2 lg:grid-cols-5 gap-5">
-                <div class="glass-card p-6 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm text-center">
-                    <p class="text-slate-400 text-[10px] font-bold uppercase mb-1">ทั้งหมดวันนี้</p>
-                    <h3 id="stat-total-today" class="text-4xl font-black">0</h3>
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <!-- ช่องที่ 1: เป้าหมายต่อวัน -->
+                <div class="glass-card p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 flex flex-col justify-between h-32 text-slate-500">
+                    <p class="text-[10px] font-black uppercase tracking-widest leading-tight">เป้าหมายส่ง<br>ต่อวัน</p>
+                    <h3 id="stat-daily-target" class="text-4xl font-black">500</h3>
                 </div>
-                <div class="glass-card p-6 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm text-center text-emerald-500">
-                    <p class="text-[10px] font-bold uppercase mb-1">สำเร็จแล้ว</p>
-                    <h3 id="stat-done-today" class="text-4xl font-black">0</h3>
+                <!-- ช่องที่ 2: วันนี้ส่งไปแล้ว -->
+                <div class="glass-card p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 flex flex-col justify-between h-32 text-accent">
+                    <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-tight">วันนี้ส่งไปแล้ว<br>(ออเดอร์)</p>
+                    <h3 id="stat-today-shipped" class="text-4xl font-black">0</h3>
                 </div>
-                <div class="glass-card p-6 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm text-center text-orange-500">
-                    <p class="text-[10px] font-bold uppercase mb-1">ค้างส่งวันนี้</p>
-                    <h3 id="stat-pending-today" class="text-4xl font-black">0</h3>
+                <!-- ช่องที่ 3: วันนี้ยังไม่ได้ส่ง -->
+                <div class="glass-card p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 flex flex-col justify-between h-32 text-orange-500">
+                    <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-tight">วันนี้ยังไม่ได้ส่ง<br>(ออเดอร์)</p>
+                    <h3 id="stat-today-remaining" class="text-4xl font-black">0</h3>
                 </div>
-                <div class="glass-card p-6 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm text-center text-red-500">
-                    <p class="text-[10px] font-bold uppercase mb-1">งานค้างสะสม</p>
-                    <h3 id="stat-delay" class="text-4xl font-black">0</h3>
+                <!-- ช่องที่ 4: ยอดค้างส่ง (Delay) -->
+                <div class="glass-card p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 flex flex-col justify-between h-32 text-rose-500">
+                    <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-tight">ยอดค้างส่ง<br>(จากวันก่อน)</p>
+                    <h3 id="stat-overdue" class="text-4xl font-black">0</h3>
                 </div>
-                <div class="glass-card p-6 rounded-[2.5rem] bg-primary text-white shadow-xl shadow-primary/30 col-span-2 lg:col-span-1 text-center">
-                    <p class="text-white/70 text-[10px] font-bold uppercase mb-1">รวมต้องจัดส่ง</p>
-                    <h3 id="stat-grand-total" class="text-4xl font-black">0</h3>
+                <!-- ช่องที่ 5: ยอดรวมที่ต้องส่ง (500 + ค้างส่ง) -->
+                <div class="bg-primary p-6 rounded-[2rem] shadow-2xl flex flex-col justify-between h-32 text-white col-span-2 lg:col-span-1">
+                    <p class="text-white/60 text-[10px] font-black uppercase tracking-widest leading-tight">ยอดรวมภาระงาน<br>(เป้าหมาย + ค้าง)</p>
+                    <h3 id="stat-total-load" class="text-4xl font-black">0</h3>
                 </div>
             </div>
-
-            <div id="dashboard-list-container" class="grid grid-cols-1 xl:grid-cols-2 gap-5"></div>
         </section>
 
-        <!-- STOCK SECTION -->
-        <section id="tab-stock" class="hidden space-y-8 animate-in fade-in duration-500">
-            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-[3rem] text-center">
-                <div class="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+        <!-- DISPATCH CENTER -->
+        <section id="tab-dispatch" class="hidden space-y-8 animate-in fade-in">
+            <div class="flex flex-col gap-6">
+                <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                    <div><h2 class="text-4xl font-black">Dispatch <span class="text-primary">Center</span></h2><p class="text-slate-400 text-sm font-bold mt-1">Upload Excel (TGT3 Sheet Only)</p></div>
+                    <div class="flex flex-wrap gap-2">
+                        <label class="cursor-pointer bg-primary text-white px-6 py-3 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl flex items-center gap-2 hover:scale-105 transition-all">
+                            <i data-lucide="upload-cloud" class="w-4 h-4"></i><span>Upload TGT3 Data</span>
+                            <input type="file" id="excel-input" class="hidden" accept=".xlsx, .xls">
+                        </label>
+                        <button onclick="openConfirmModal()" class="px-6 py-3 bg-rose-50 dark:bg-rose-500/10 text-rose-500 font-bold border border-rose-100 rounded-2xl text-[11px] uppercase tracking-widest hover:bg-rose-100 transition-colors">Reset DB</button>
+                    </div>
                 </div>
-                <h2 class="text-2xl font-bold">นำเข้าข้อมูล TGT3</h2>
-                <p class="text-slate-500 text-sm mb-6 italic">เรียงลำดับ: Customer > Sale Part > Delivery Date > Order No1 > Qty</p>
-                <label class="inline-flex cursor-pointer btn-primary px-10 py-4 rounded-2xl font-bold shadow-lg shadow-primary/20">
-                    <span>อัปโหลด Excel</span>
-                    <input type="file" id="excel-input" class="hidden" accept=".xlsx, .xls">
-                </label>
-                <button onclick="clearAllData()" class="block mx-auto mt-4 text-xs text-red-400 hover:underline">ล้างฐานข้อมูล</button>
+                <div class="relative w-full"><i data-lucide="search" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i><input type="text" id="dispatch-search" placeholder="Search Customer / Part / Order No..." class="w-full pl-11 pr-4 py-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm outline-none"></div>
             </div>
+            <div id="dispatch-list-container" class="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden min-h-[200px]"></div>
+        </section>
 
-            <!-- ตารางคลังสินค้า -->
-            <div class="glass-card border border-slate-200 dark:border-slate-800 rounded-[2.5rem] overflow-hidden">
+        <!-- INVENTORY (STOCK) -->
+        <section id="tab-stock" class="hidden space-y-8 animate-in fade-in">
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <div><h2 class="text-4xl font-black">Inventory <span class="text-primary">Status</span></h2><p class="text-slate-400 text-sm font-bold mt-1">Current Stock Records</p></div>
+                <div class="relative w-full md:w-96"><i data-lucide="search" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i><input type="text" id="stock-search" placeholder="Search Inventory..." class="w-full pl-11 pr-4 py-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs outline-none"></div>
+            </div>
+            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] overflow-hidden shadow-sm">
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left text-sm min-w-[1000px]">
-                        <thead class="bg-slate-50 dark:bg-slate-800 font-bold border-b border-slate-100 dark:border-slate-700">
+                    <table class="w-full text-left text-sm min-w-[800px]">
+                        <thead class="bg-slate-50 dark:bg-slate-800/50 font-black text-slate-400 border-b">
                             <tr>
-                                <th class="p-5">Customer</th>
-                                <th class="p-5">Sale Part</th>
-                                <th class="p-5">Delivery Date</th>
-                                <th class="p-5">Order No1</th>
-                                <th class="p-5 text-center">Shipped (ส่งแล้ว)</th>
-                                <th class="p-5 text-center">Status</th>
-                                <th class="p-5 text-center bg-slate-100/50 dark:bg-slate-700/50 border-l border-slate-200 dark:border-slate-600">Qty (ทั้งหมด)</th>
+                                <th class="px-8 py-6">Customer</th>
+                                <th class="px-8 py-6">Sale Part / Order</th>
+                                <th class="px-8 py-6 text-center">Delivery Date</th>
+                                <th class="px-8 py-6 text-center">Shipped</th>
+                                <th class="px-8 py-6 text-right">In Stock</th>
                             </tr>
                         </thead>
-                        <tbody id="stock-table-body"></tbody>
+                        <tbody id="stock-table-body" class="divide-y divide-slate-50 dark:divide-slate-800"></tbody>
                     </table>
                 </div>
             </div>
         </section>
 
-        <!-- HISTORY SECTION -->
-        <section id="tab-history" class="hidden space-y-6 animate-in fade-in duration-500">
-            <h2 class="text-3xl font-bold">ประวัติการทำงาน</h2>
-            <div id="history-container" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5"></div>
+        <!-- HISTORY -->
+        <section id="tab-history" class="hidden space-y-6 animate-in fade-in">
+            <h2 class="text-4xl font-black">Dispatch <span class="text-primary">Logs</span></h2>
+            <div id="history-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
         </section>
     </main>
 
-    <!-- Modal การบันทึกส่งงาน -->
-    <div id="dispatch-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-        <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] p-8 space-y-6 shadow-2xl">
-            <div class="flex justify-between items-center">
-                <h3 id="modal-customer-name" class="text-2xl font-black text-primary uppercase"></h3>
-                <span id="modal-order-id" class="text-xs bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full font-bold"></span>
+    <!-- Dispatch Modal -->
+    <div id="dispatch-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-[3.5rem] p-10 shadow-2xl border space-y-6">
+            <h3 class="text-2xl font-black text-primary uppercase" id="m-cust"></h3>
+            <div class="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl">
+                <p class="font-black text-lg" id="m-part"></p>
+                <p class="text-xs text-slate-400 mt-1" id="m-ref"></p>
+                <div class="mt-4 flex justify-between items-center"><span class="text-xs font-bold text-slate-400">Current Stock</span><span class="text-3xl font-black text-rose-500" id="m-rem"></span></div>
             </div>
-            <div class="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
-                <p id="modal-part-code" class="text-lg font-black text-slate-800 dark:text-slate-100"></p>
-                <p id="modal-part-name" class="text-xs font-medium text-slate-400 mt-1"></p>
-                <div class="flex justify-between items-end mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                    <p class="text-sm">ยอดคงค้าง:</p>
-                    <p id="modal-balance-qty" class="text-3xl font-black text-red-500"></p>
+            <input type="number" id="dispatch-qty-input" class="w-full bg-slate-100 dark:bg-slate-800 p-5 rounded-3xl text-3xl font-black text-center outline-none border-2 border-transparent focus:border-primary">
+            <button id="confirm-dispatch-btn" class="w-full btn-primary py-5 rounded-3xl font-black uppercase tracking-widest">Ship Goods</button>
+            <button onclick="closeModal('dispatch-modal')" class="w-full text-slate-400 font-bold text-sm">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Invoice View Modal -->
+    <div id="invoice-modal" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm">
+        <div class="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div id="invoice-print-area" class="p-10 flex-1 overflow-y-auto bg-white text-slate-900">
+                <div class="flex justify-between items-start border-b-4 border-slate-900 pb-8 mb-8">
+                    <div>
+                        <h1 class="text-4xl font-black tracking-tighter italic">DELIVERY BILL</h1>
+                        <p class="text-xs font-bold text-slate-500 mt-1">WAREHOUSE MANAGEMENT SYSTEM TGT3</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs font-black uppercase text-slate-400">Date Issued</p>
+                        <p id="inv-date" class="font-bold text-sm"></p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-10 mb-10">
+                    <div>
+                        <p class="text-[10px] font-black uppercase text-slate-400 mb-2">Customer Info</p>
+                        <h2 id="inv-customer" class="text-2xl font-black uppercase leading-tight"></h2>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-[10px] font-black uppercase text-slate-400 mb-2">Reference</p>
+                        <p id="inv-order" class="font-bold"></p>
+                    </div>
+                </div>
+
+                <table class="w-full mb-10">
+                    <thead>
+                        <tr class="border-y-2 border-slate-900">
+                            <th class="py-4 text-left text-xs font-black uppercase italic">Item / Sale Part</th>
+                            <th class="py-4 text-right text-xs font-black uppercase italic">Quantity</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="border-b border-slate-100">
+                            <td class="py-6">
+                                <p id="inv-part" class="font-black text-lg"></p>
+                                <p class="text-[10px] text-slate-400 font-bold">Standard Packing Goods</p>
+                            </td>
+                            <td class="py-6 text-right">
+                                <p id="inv-qty" class="text-3xl font-black"></p>
+                                <p class="text-[10px] text-slate-400 font-bold uppercase">Units</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="flex justify-between items-end mt-20">
+                    <div class="w-40 md:w-48 border-t-2 border-slate-900 pt-4 text-center">
+                        <p class="text-[10px] font-black uppercase">Recipient Signature</p>
+                    </div>
+                    <div class="w-40 md:w-48 border-t-2 border-slate-900 pt-4 text-center">
+                        <p class="text-[10px] font-black uppercase">Dispatcher Signature</p>
+                    </div>
                 </div>
             </div>
-            <div>
-                <label class="text-[10px] font-black uppercase text-slate-400 ml-2">จำนวนที่ต้องการเบิกออก</label>
-                <input type="number" id="input-dispatch-qty" class="w-full bg-slate-100 dark:bg-slate-800 p-5 rounded-2xl text-3xl font-black text-center mt-1 outline-none border-4 border-transparent focus:border-primary">
-            </div>
-            <div class="flex gap-3">
-                <button onclick="closeModal('dispatch-modal')" class="flex-1 py-4 font-bold text-slate-400">ยกเลิก</button>
-                <button id="confirm-dispatch-btn" class="flex-2 btn-primary py-4 rounded-2xl font-bold px-8 shadow-lg shadow-primary/20">ยืนยันการจัดส่ง</button>
+            <div class="p-6 bg-slate-50 dark:bg-slate-800 border-t flex flex-wrap gap-4 no-print">
+                <button onclick="downloadInvoicePDF()" class="flex-1 bg-accent text-white py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:opacity-90 transition-all">
+                    <i data-lucide="download" class="w-4 h-4"></i> Download PDF
+                </button>
+                <button onclick="window.print()" class="flex-1 btn-primary py-4 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:opacity-90 transition-all">
+                    <i data-lucide="printer" class="w-4 h-4"></i> Print Bill
+                </button>
+                <button onclick="closeModal('invoice-modal')" class="px-8 py-4 bg-white dark:bg-slate-700 border font-black rounded-2xl text-xs uppercase hover:bg-slate-100 transition-colors">Close</button>
             </div>
         </div>
     </div>
 
     <script>
-        const db = new Dexie('TGT3_Warehouse_V2');
+        const dbName = 'TGT3_Warehouse_Optimized_V4';
+        const db = new Dexie(dbName);
         db.version(1).stores({
-            orders: '++id, orderId, customer, date, partCode, partName, qty, shippedQty, status',
-            history: '++id, orderId, timestamp, qty, partCode'
+            orders: '++id, customer, salePart, deliveryDate, qty, shippedQty, orderNo',
+            history: '++id, timestamp, salePart, qty, customer, orderNo'
         });
 
-        const todayStr = new Date().toISOString().split('T')[0];
-        document.getElementById('current-date-display').innerText = new Date().toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        // Set Today String in Local Time
+        const getTodayStr = () => {
+            const now = new Date();
+            const offset = now.getTimezoneOffset() * 60000;
+            const localDate = new Date(now - offset);
+            return localDate.toISOString().split('T')[0];
+        };
+        const todayStr = getTodayStr();
 
-        function toggleTheme() { document.documentElement.classList.toggle('dark'); }
-        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        document.getElementById('current-date-display').innerText = new Date().toLocaleDateString('th-TH', { dateStyle: 'full' });
 
-        async function updateDashboard() {
-            const all = await db.orders.toArray();
-            const todayRows = all.filter(o => o.date === todayStr);
-            const doneToday = todayRows.filter(o => o.status === 'จัดส่งแล้ว');
-            const pendingToday = todayRows.filter(o => o.status !== 'จัดส่งแล้ว');
-            const delay = all.filter(o => o.date < todayStr && o.status !== 'จัดส่งแล้ว');
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            t.classList.remove('hidden');
+            setTimeout(() => t.classList.add('hidden'), 3000);
+        }
 
-            document.getElementById('stat-total-today').innerText = todayRows.length;
-            document.getElementById('stat-done-today').innerText = doneToday.length;
-            document.getElementById('stat-pending-today').innerText = pendingToday.length;
-            document.getElementById('stat-delay').innerText = delay.length;
-            document.getElementById('stat-grand-total').innerText = pendingToday.length + delay.length;
-
-            const listContainer = document.getElementById('dashboard-list-container');
-            const targetList = [...delay, ...pendingToday];
-
-            if (targetList.length === 0) {
-                listContainer.innerHTML = `<div class="col-span-full p-20 text-center text-slate-400 font-bold border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl">ไม่มีรายการที่ต้องจัดส่งในขณะนี้</div>`;
+        function toggleLoading(show, progress = 0) {
+            const overlay = document.getElementById('loading-overlay');
+            if(show) {
+                overlay.classList.remove('hidden');
+                document.getElementById('loading-progress').innerText = `${progress}%`;
             } else {
-                listContainer.innerHTML = targetList.map(o => `
-                    <div class="glass-card p-6 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 flex flex-col gap-4 shadow-sm hover:scale-[1.01] transition-all">
-                        <div class="flex justify-between items-start">
-                            <div>
-                                <h4 class="font-black text-xl text-primary uppercase">${o.customer}</h4>
-                                <p class="text-xs font-bold text-slate-500">กำหนดส่ง: ${o.date}</p>
-                            </div>
-                            <div class="text-right">
-                                <span class="text-[9px] font-black px-2 py-0.5 rounded-md ${o.date < todayStr ? 'bg-red-500' : 'bg-blue-500'} text-white uppercase">${o.date < todayStr ? 'ค้างส่งสะสม' : 'จัดส่งวันนี้'}</span>
-                            </div>
-                        </div>
-                        <div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
-                            <p class="text-lg font-black">${o.partCode}</p>
-                            <p class="text-[10px] text-slate-400 font-medium truncate">${o.partName}</p>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                             <div class="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl">
-                                <p class="text-[8px] font-black text-slate-400 uppercase">Order No1</p>
-                                <p class="font-bold text-sm truncate">#${o.orderId}</p>
-                             </div>
-                             <div class="bg-slate-100 dark:bg-slate-800 p-3 rounded-xl border-l-4 border-primary shadow-inner">
-                                <p class="text-[8px] font-black text-primary uppercase text-right">Qty (จำนวน)</p>
-                                <p class="font-black text-2xl text-right">${o.qty}</p>
-                             </div>
-                        </div>
-                        <div class="flex items-center justify-between px-2">
-                             <span class="text-[10px] font-bold text-emerald-500">ส่งแล้ว: ${o.shippedQty || 0}</span>
-                             <span class="text-[10px] font-bold text-red-500">คงเหลือ: ${o.qty - (o.shippedQty || 0)}</span>
-                        </div>
-                        <button onclick="openDispatchModal(${o.id})" class="btn-primary py-4 rounded-2xl font-black text-sm tracking-wide">จัดการเบิก/ส่งของ</button>
-                    </div>
-                `).join('');
+                overlay.classList.add('hidden');
             }
+        }
+
+        // --- DASHBOARD UPDATED CALCULATION ---
+        async function updateDashboard() {
+            const DAILY_TARGET = 500;
+            
+            // 1. เป้าหมายต่อวัน (คงที่)
+            document.getElementById('stat-daily-target').innerText = DAILY_TARGET;
+
+            // 2. วันนี้ส่งไปแล้วกี่ออเดอร์ (เช็คจากประวัติการส่งในวันนี้)
+            const historyToday = await db.history.toArray();
+            const shippedTodayCount = historyToday.filter(h => h.timestamp.startsWith(todayStr)).length;
+            document.getElementById('stat-today-shipped').innerText = shippedTodayCount;
+
+            // 3. วันนี้ยังไม่ได้ส่งกี่ออเดอร์ (เป้าหมาย 500 - ส่งไปแล้ววันนี้)
+            const remainingToday = Math.max(0, DAILY_TARGET - shippedTodayCount);
+            document.getElementById('stat-today-remaining').innerText = remainingToday;
+
+            // 4. ยอดที่ Delay หรือค้างของเมื่อวาน (ออเดอร์ที่มีของเหลือและกำหนดส่งก่อนวันนี้)
+            const allOrders = await db.orders.toArray();
+            const overdueOrders = allOrders.filter(o => o.qty > 0 && o.deliveryDate < todayStr);
+            const overdueCount = overdueOrders.length;
+            document.getElementById('stat-overdue').innerText = overdueCount;
+
+            // 5. ยอดที่ต้องส่งทั้งหมด (500 ต่อวัน + ยอดค้างส่ง)
+            const totalLoad = DAILY_TARGET + overdueCount;
+            document.getElementById('stat-total-load').innerText = totalLoad;
+        }
+
+        // --- EXCEL IMPORT ---
+        document.getElementById('excel-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            toggleLoading(true, 0);
+            const reader = new FileReader();
+            
+            reader.onload = async function(event) {
+                try {
+                    const workbook = XLSX.read(new Uint8Array(event.target.result), { type: 'array', cellDates: true });
+                    let sheetName = workbook.SheetNames.find(n => n.toUpperCase() === "TGT3") || workbook.SheetNames[0];
+                    const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+
+                    if (rawData.length < 2) throw new Error("File has no data");
+
+                    let colMap = { customer: -1, salePart: -1, deliveryDate: -1, qty: -1, orderNo: -1 };
+                    const headerRow = rawData.find(row => {
+                        let found = 0;
+                        row.forEach((cell, idx) => {
+                            const val = String(cell || "").toUpperCase().trim();
+                            if(val.includes("CUSTOMER")) { colMap.customer = idx; found++; }
+                            if(val.includes("SALE PART")) { colMap.salePart = idx; found++; }
+                            if(val.includes("DELIVERY DATE")) { colMap.deliveryDate = idx; found++; }
+                            if(val.includes("QTY")) { colMap.qty = idx; found++; }
+                            if(val.includes("ORDER NO1")) { colMap.orderNo = idx; found++; }
+                        });
+                        return found >= 3;
+                    });
+
+                    if(!headerRow) throw new Error("Header not found");
+
+                    const startIndex = rawData.indexOf(headerRow) + 1;
+                    const dataToImport = rawData.slice(startIndex).filter(r => r[colMap.customer] || r[colMap.salePart]);
+                    const totalRows = dataToImport.length;
+                    
+                    const batchSize = 100;
+                    for (let i = 0; i < totalRows; i += batchSize) {
+                        const batch = dataToImport.slice(i, i + batchSize);
+                        const processedBatch = batch.map(r => {
+                            let d = r[colMap.deliveryDate];
+                            if(d instanceof Date) d = d.toISOString().split('T')[0];
+                            else d = String(d || todayStr).split(' ')[0];
+
+                            return {
+                                customer: String(r[colMap.customer] || "Unknown").trim(),
+                                salePart: String(r[colMap.salePart] || "N/A").trim(),
+                                deliveryDate: d,
+                                qty: parseInt(r[colMap.qty]) || 0,
+                                shippedQty: 0,
+                                orderNo: String(r[colMap.orderNo] || "-").trim()
+                            };
+                        }).filter(item => item.qty > 0);
+
+                        if(processedBatch.length > 0) {
+                            await db.orders.bulkAdd(processedBatch);
+                        }
+                        const progress = Math.round(((i + batch.length) / totalRows) * 100);
+                        document.getElementById('loading-progress').innerText = `${progress}%`;
+                        await new Promise(r => requestAnimationFrame(r));
+                    }
+
+                    showToast("Import successful");
+                    showTab('dispatch');
+                } catch (err) {
+                    alert(err.message);
+                } finally {
+                    toggleLoading(false);
+                    e.target.value = "";
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // --- DISPATCH LIST ---
+        async function updateDispatchList() {
+            const search = document.getElementById('dispatch-search').value.toUpperCase();
+            let list = await db.orders.where('qty').above(0).toArray();
+            if(search) {
+                list = list.filter(o => o.customer.toUpperCase().includes(search) || o.salePart.toUpperCase().includes(search) || o.orderNo.toUpperCase().includes(search));
+            }
+            list.sort((a,b) => a.deliveryDate.localeCompare(b.deliveryDate));
+            
+            const container = document.getElementById('dispatch-list-container');
+            container.innerHTML = list.length === 0 ? `<div class="p-20 text-center opacity-30 italic">No dispatch orders</div>` : list.slice(0, 100).map(o => `
+                <div class="flex flex-col md:grid md:grid-cols-12 gap-4 px-8 py-5 items-center hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <div class="md:col-span-3 w-full">
+                        <h4 class="font-black text-primary uppercase truncate">${o.customer}</h4>
+                        <p class="text-[10px] font-bold text-slate-400">Order: ${o.orderNo}</p>
+                    </div>
+                    <div class="md:col-span-4 w-full">
+                        <p class="font-black text-sm">${o.salePart}</p>
+                        <p class="text-[10px] ${o.deliveryDate < todayStr ? 'text-rose-500' : 'text-slate-400'} font-bold uppercase">Delivery Date: ${o.deliveryDate} ${o.deliveryDate < todayStr ? '(Overdue)' : ''}</p>
+                    </div>
+                    <div class="md:col-span-3 text-center w-full"><p class="font-black text-2xl tracking-tighter">${o.qty}</p></div>
+                    <div class="md:col-span-2 text-right w-full"><button onclick="openDispatchModal(${o.id})" class="btn-primary w-full py-3 rounded-2xl font-black text-xs uppercase shadow-lg">Ship</button></div>
+                </div>
+            `).join('');
             lucide.createIcons();
         }
 
-        async function openDispatchModal(id) {
-            const order = await db.orders.get(id);
-            const balance = order.qty - (order.shippedQty || 0);
-            document.getElementById('modal-customer-name').innerText = order.customer;
-            document.getElementById('modal-order-id').innerText = order.orderId;
-            document.getElementById('modal-part-code').innerText = order.partCode;
-            document.getElementById('modal-part-name').innerText = order.partName;
-            document.getElementById('modal-balance-qty').innerText = balance;
-            document.getElementById('input-dispatch-qty').value = balance;
-            document.getElementById('confirm-dispatch-btn').onclick = () => executeDispatch(id);
-            document.getElementById('dispatch-modal').classList.remove('hidden');
-        }
-
-        async function executeDispatch(id) {
-            const qtyInput = parseInt(document.getElementById('input-dispatch-qty').value);
-            const order = await db.orders.get(id);
-            if (!qtyInput || qtyInput <= 0 || qtyInput > (order.qty - order.shippedQty)) return;
-            
-            const newShipped = order.shippedQty + qtyInput;
-            const finalStatus = newShipped >= order.qty ? 'จัดส่งแล้ว' : 'ส่งบางส่วน';
-            
-            await db.orders.update(id, { shippedQty: newShipped, status: finalStatus });
-            await db.history.add({ orderId: order.orderId, partCode: order.partCode, qty: qtyInput, timestamp: new Date().toISOString() });
-            
-            closeModal('dispatch-modal');
-            updateDashboard();
-        }
-
+        // --- INVENTORY TABLE ---
         async function updateStockTable() {
-            const all = await db.orders.toArray();
+            const search = document.getElementById('stock-search').value.toUpperCase();
+            let all = await db.orders.toArray();
+            if(search) {
+                all = all.filter(o => o.customer.toUpperCase().includes(search) || o.salePart.toUpperCase().includes(search) || o.orderNo.toUpperCase().includes(search));
+            }
+            
             const tbody = document.getElementById('stock-table-body');
-            tbody.innerHTML = all.reverse().map(o => `
-                <tr class="border-b border-slate-50 dark:border-slate-800 hover:bg-slate-50/50">
-                    <td class="p-5 font-black text-primary uppercase">${o.customer}</td>
-                    <td class="p-5">
-                        <div class="font-bold text-sm">${o.partCode}</div>
-                        <div class="text-[10px] text-slate-400 truncate w-40">${o.partName}</div>
+            tbody.innerHTML = all.length === 0 ? `<tr><td colspan="5" class="p-20 text-center opacity-20 italic">No Stock Data</td></tr>` : all.reverse().map(o => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td class="px-8 py-6 font-black text-primary uppercase">${o.customer}</td>
+                    <td class="px-8 py-6">
+                        <div class="font-black">${o.salePart}</div>
+                        <div class="text-[10px] text-slate-400">Order: ${o.orderNo}</div>
                     </td>
-                    <td class="p-5 font-bold text-slate-500">${o.date}</td>
-                    <td class="p-5 font-bold">#${o.orderId}</td>
-                    <td class="p-5 text-center font-black text-emerald-500">${o.shippedQty}</td>
-                    <td class="p-5 text-center">
-                        <span class="px-3 py-1 rounded-full text-[9px] font-black ${o.status === 'จัดส่งแล้ว' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}">
-                            ${o.status}
-                        </span>
-                    </td>
-                    <td class="p-5 text-center font-black bg-slate-100/30 dark:bg-slate-800/50 text-xl border-l border-slate-200 dark:border-slate-700">${o.qty}</td>
+                    <td class="px-8 py-6 text-center font-bold ${o.qty > 0 && o.deliveryDate < todayStr ? 'text-rose-500 underline' : 'text-slate-500'}">${o.deliveryDate}</td>
+                    <td class="px-8 py-6 text-center"><span class="font-black text-accent text-lg">${o.shippedQty || 0}</span></td>
+                    <td class="px-8 py-6 text-right"><span class="text-2xl font-black ${o.qty > 0 ? '' : 'text-slate-300'}">${o.qty}</span></td>
                 </tr>
             `).join('');
         }
 
+        // --- HISTORY LOGS ---
         async function renderHistory() {
             const logs = await db.history.orderBy('id').reverse().toArray();
             const container = document.getElementById('history-container');
-            container.innerHTML = logs.map(l => `
-                <div class="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl flex justify-between items-center shadow-sm">
-                    <div>
-                        <p class="text-[10px] text-slate-400 font-bold">${new Date(l.timestamp).toLocaleTimeString()}</p>
-                        <p class="font-black text-lg">#${l.orderId}</p>
-                        <p class="text-xs font-bold text-primary">${l.partCode}</p>
+            container.innerHTML = logs.length === 0 ? `<div class="col-span-full p-20 text-center opacity-20 italic">No History Found</div>` : logs.map(l => `
+                <div class="p-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2.5rem] shadow-sm flex flex-col gap-4">
+                    <div class="flex justify-between items-start">
+                        <div class="bg-accent/10 text-accent p-2 rounded-xl"><i data-lucide="check-circle" class="w-5 h-5"></i></div>
+                        <button onclick="viewInvoice(${l.id})" class="text-slate-400 hover:text-primary transition-colors p-2"><i data-lucide="eye" class="w-5 h-5"></i></button>
                     </div>
-                    <div class="text-right">
-                        <p class="text-[10px] font-black text-emerald-500 uppercase">เบิกออกแล้ว</p>
-                        <p class="text-2xl font-black text-emerald-600">${l.qty}</p>
+                    <div>
+                        <p class="text-[10px] text-slate-400 font-black uppercase tracking-tighter mb-1">${new Date(l.timestamp).toLocaleString('th-TH')}</p>
+                        <p class="font-black text-lg text-slate-900 dark:text-white uppercase leading-tight truncate">${l.customer}</p>
+                        <p class="text-[11px] font-bold text-slate-500 truncate">${l.salePart}</p>
+                    </div>
+                    <div class="flex justify-between items-end border-t border-slate-50 dark:border-slate-800 pt-4 mt-2">
+                         <div class="text-[10px] font-bold text-slate-400 uppercase">Qty Dispatched</div>
+                         <div class="text-2xl font-black text-accent">${l.qty}</div>
                     </div>
                 </div>
             `).join('');
             lucide.createIcons();
         }
 
-        function showTab(tab) {
-            ['dashboard', 'stock', 'history'].forEach(t => {
-                document.getElementById(`tab-${t}`).classList.add('hidden');
-                document.getElementById(`d-nav-${t}`).classList.remove('sidebar-btn-active');
-                document.getElementById(`m-nav-${t}`).classList.remove('nav-btn-active');
-            });
-            document.getElementById(`tab-${tab}`).classList.remove('hidden');
-            document.getElementById(`d-nav-${tab}`).classList.add('sidebar-btn-active');
-            document.getElementById(`m-nav-${tab}`).classList.add('nav-btn-active');
-            if (tab === 'dashboard') updateDashboard();
-            if (tab === 'stock') updateStockTable();
-            if (tab === 'history') renderHistory();
+        // --- CORE UI HANDLERS ---
+        async function openDispatchModal(id) {
+            const o = await db.orders.get(id);
+            document.getElementById('m-cust').innerText = o.customer;
+            document.getElementById('m-part').innerText = o.salePart;
+            document.getElementById('m-ref').innerText = `Order: ${o.orderNo}`;
+            document.getElementById('m-rem').innerText = o.qty;
+            document.getElementById('dispatch-qty-input').value = o.qty;
+            document.getElementById('confirm-dispatch-btn').onclick = () => executeDispatch(id);
+            document.getElementById('dispatch-modal').classList.remove('hidden');
+        }
+
+        async function executeDispatch(id) {
+            const val = parseInt(document.getElementById('dispatch-qty-input').value);
+            const o = await db.orders.get(id);
+            if(!val || val <= 0 || val > o.qty) return showToast("Invalid Quantity");
+            
+            await db.orders.update(id, { qty: o.qty - val, shippedQty: (o.shippedQty || 0) + val });
+            await db.history.add({ customer: o.customer, salePart: o.salePart, qty: val, orderNo: o.orderNo, timestamp: new Date().toISOString() });
+            
+            closeModal('dispatch-modal');
+            showToast("Dispatch recorded");
+            await updateDashboard();
+            await updateDispatchList();
+        }
+
+        async function viewInvoice(historyId) {
+            const h = await db.history.get(historyId);
+            if(!h) return;
+            
+            document.getElementById('inv-date').innerText = new Date(h.timestamp).toLocaleString('th-TH');
+            document.getElementById('inv-customer').innerText = h.customer;
+            document.getElementById('inv-order').innerText = h.orderNo || '-';
+            document.getElementById('inv-part').innerText = h.salePart;
+            document.getElementById('inv-qty').innerText = h.qty;
+            
+            document.getElementById('invoice-modal').classList.remove('hidden');
             lucide.createIcons();
         }
 
-        async function clearAllData() { if(confirm("ต้องการล้างข้อมูลทั้งหมดใช่หรือไม่?")) { await db.orders.clear(); await db.history.clear(); updateStockTable(); } }
-
-        document.getElementById('excel-input').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = async function(event) {
-                const data = new Uint8Array(event.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames.find(n => n.toUpperCase().includes("TGT3")) || workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-                let colMap = { customer: -1, partCode: -1, partName: -1, date: -1, qty: -1, order: -1 };
-                let headerIdx = -1;
-
-                for (let i = 0; i < Math.min(rows.length, 20); i++) {
-                    const row = rows[i];
-                    if (!row) continue;
-                    row.forEach((cell, idx) => {
-                        const txt = String(cell || "").toUpperCase().trim();
-                        if (txt === "CUSTOMER") colMap.customer = idx;
-                        if (txt === "SALE PART") colMap.partCode = idx;
-                        if (txt === "PART NAME") colMap.partName = idx;
-                        if (txt === "DELIVERY DATE") colMap.date = idx;
-                        if (txt === "QTY") colMap.qty = idx;
-                        if (txt === "ORDER NO1") colMap.order = idx;
-                    });
-                    if (colMap.order !== -1) { headerIdx = i; break; }
-                }
-
-                if (headerIdx === -1) return alert("ไม่พบคอลัมน์ Order No1 ในไฟล์ที่อัปโหลด กรุณาตรวจสอบรูปแบบไฟล์");
-
-                let imported = 0;
-                for (let i = headerIdx + 1; i < rows.length; i++) {
-                    const row = rows[i];
-                    if (!row || !row[colMap.order]) continue;
-
-                    let dDate = row[colMap.date];
-                    if (typeof dDate === 'number') {
-                        dDate = new Date((dDate - 25569) * 86400 * 1000).toISOString().split('T')[0];
-                    }
-
-                    await db.orders.add({
-                        orderId: String(row[colMap.order]),
-                        customer: String(row[colMap.customer] || "N/A"),
-                        date: dDate || todayStr,
-                        partCode: String(row[colMap.partCode] || "-"),
-                        partName: String(row[colMap.partName] || "N/A"),
-                        qty: parseInt(row[colMap.qty]) || 0,
-                        shippedQty: 0,
-                        status: 'อยู่ในคลัง' // เปลี่ยนค่าเริ่มต้นเป็น "อยู่ในคลัง"
-                    });
-                    imported++;
-                }
-                alert(`นำเข้าข้อมูลจาก Sheet ${sheetName} สำเร็จ ${imported} รายการ สถานะเริ่มต้นเป็น 'อยู่ในคลัง'`);
-                showTab('dashboard');
+        function downloadInvoicePDF() {
+            const element = document.getElementById('invoice-print-area');
+            const customerName = document.getElementById('inv-customer').innerText || "Customer";
+            const dateStr = new Date().toISOString().split('T')[0];
+            
+            const opt = {
+                margin: 0.5,
+                filename: `Invoice_${customerName}_${dateStr}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
             };
-            reader.readAsArrayBuffer(file);
-            e.target.value = '';
-        });
+            
+            toggleLoading(true, 100);
+            html2pdf().set(opt).from(element).save().then(() => {
+                toggleLoading(false);
+                showToast("PDF Downloaded");
+            }).catch(err => {
+                console.error(err);
+                toggleLoading(false);
+                showToast("PDF Download Failed");
+            });
+        }
 
-        window.onload = () => showTab('dashboard');
+        function showTab(tab) {
+            ['dashboard', 'dispatch', 'stock', 'history'].forEach(t => {
+                const tabEl = document.getElementById(`tab-${t}`);
+                const navEl = document.getElementById(`d-nav-${t}`);
+                if(tabEl) tabEl.classList.add('hidden');
+                if(navEl) navEl.classList.remove('sidebar-btn-active');
+            });
+            const targetTab = document.getElementById(`tab-${tab}`);
+            const targetNav = document.getElementById(`d-nav-${tab}`);
+            if(targetTab) targetTab.classList.remove('hidden');
+            if(targetNav) targetNav.classList.add('sidebar-btn-active');
+            
+            if(tab === 'dashboard') updateDashboard();
+            if(tab === 'dispatch') updateDispatchList();
+            if(tab === 'stock') updateStockTable();
+            if(tab === 'history') renderHistory();
+            lucide.createIcons();
+        }
+
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        function toggleTheme() { document.documentElement.classList.toggle('dark'); }
+
+        function openConfirmModal() {
+            document.getElementById('confirm-modal').classList.remove('hidden');
+            document.getElementById('btn-confirm-delete').onclick = clearAllData;
+            lucide.createIcons();
+        }
+
+        async function clearAllData() {
+            try {
+                toggleLoading(true, 50);
+                await db.orders.clear();
+                await db.history.clear();
+                closeModal('confirm-modal');
+                await updateDashboard();
+                await updateDispatchList();
+                await updateStockTable();
+                await renderHistory();
+                showToast("ล้างข้อมูลสำเร็จแล้ว");
+            } catch (err) {
+                console.error("Reset Error:", err);
+                showToast("เกิดข้อผิดพลาดในการรีเซ็ต");
+            } finally {
+                toggleLoading(false);
+            }
+        }
+        
+        document.getElementById('dispatch-search').addEventListener('input', updateDispatchList);
+        document.getElementById('stock-search').addEventListener('input', updateStockTable);
+        window.onload = () => {
+            showTab('dashboard');
+            lucide.createIcons();
+        };
     </script>
 </body>
 </html>
