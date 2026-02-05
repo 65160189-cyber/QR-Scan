@@ -86,6 +86,8 @@
             <div class="flex justify-between items-start">
                 <div><h2 class="text-4xl md:text-5xl font-black tracking-tight">System <span class="text-primary">Overview</span></h2><p class="text-slate-400 text-sm font-bold mt-2" id="current-date-display"></p></div>
             </div>
+            
+            <!-- Dashboard Stats 5 ช่อง -->
             <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
                 <!-- ช่องที่ 1: เป้าหมายต่อวัน -->
                 <div class="glass-card p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 flex flex-col justify-between h-32 text-slate-500">
@@ -111,6 +113,36 @@
                 <div class="bg-primary p-6 rounded-[2rem] shadow-2xl flex flex-col justify-between h-32 text-white col-span-2 lg:col-span-1">
                     <p class="text-white/60 text-[10px] font-black uppercase tracking-widest leading-tight">ยอดรวมภาระงาน<br>(เป้าหมาย + ค้าง)</p>
                     <h3 id="stat-total-load" class="text-4xl font-black">0</h3>
+                </div>
+            </div>
+
+            <!-- เพิ่มตารางข้อมูลข้างล่าง Dashboard ตาม Format ใน Excel Sheet 1 -->
+            <div class="mt-12 space-y-4">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="list" class="w-5 h-5 text-primary"></i>
+                    <h3 class="text-xl font-black uppercase tracking-tight">Order Details (Sheet 1 Format)</h3>
+                </div>
+                <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[2rem] overflow-hidden shadow-sm">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm min-w-[900px]">
+                            <thead class="bg-slate-50 dark:bg-slate-800 font-black text-slate-500 border-b dark:border-slate-700">
+                                <tr>
+                                    <th rowspan="2" class="px-6 py-4 border-r dark:border-slate-700">Customer</th>
+                                    <th rowspan="2" class="px-6 py-4 border-r dark:border-slate-700">Order No1</th>
+                                    <th rowspan="2" class="px-6 py-4 border-r dark:border-slate-700">Sale Part</th>
+                                    <th colspan="3" class="px-6 py-2 text-center bg-slate-100 dark:bg-slate-700/50">Record</th>
+                                </tr>
+                                <tr class="border-t dark:border-slate-700">
+                                    <th class="px-6 py-3 text-center border-r dark:border-slate-700">Origin</th>
+                                    <th class="px-6 py-3 text-center border-r dark:border-slate-700">Export</th>
+                                    <th class="px-6 py-3 text-center">Remaining</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dashboard-table-body" class="divide-y divide-slate-50 dark:divide-slate-800">
+                                <!-- Data rows injected here -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>
@@ -251,7 +283,7 @@
         const dbName = 'TGT3_Warehouse_Optimized_V4';
         const db = new Dexie(dbName);
         db.version(1).stores({
-            orders: '++id, customer, salePart, deliveryDate, qty, shippedQty, orderNo',
+            orders: '++id, customer, salePart, deliveryDate, qty, originQty, shippedQty, orderNo',
             history: '++id, timestamp, salePart, qty, customer, orderNo'
         });
 
@@ -308,6 +340,32 @@
             // 5. ยอดที่ต้องส่งทั้งหมด (500 ต่อวัน + ยอดค้างส่ง)
             const totalLoad = DAILY_TARGET + overdueCount;
             document.getElementById('stat-total-load').innerText = totalLoad;
+
+            // แสดงตาราง Dashboard (Sheet 1 Format)
+            renderDashboardTable(allOrders);
+        }
+
+        // --- RENDER DASHBOARD TABLE (Sheet 1 Format) ---
+        function renderDashboardTable(orders) {
+            const tbody = document.getElementById('dashboard-table-body');
+            if (!orders || orders.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-10 text-center opacity-30 italic">No data available. Please upload Excel.</td></tr>`;
+                return;
+            }
+
+            // แสดงข้อมูลล่าสุดไว้ข้างบน หรือตามลำดับ Delivery Date
+            const sorted = [...orders].sort((a,b) => a.deliveryDate.localeCompare(b.deliveryDate));
+
+            tbody.innerHTML = sorted.map(o => `
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                    <td class="px-6 py-4 border-r dark:border-slate-700 font-black text-primary uppercase">${o.customer}</td>
+                    <td class="px-6 py-4 border-r dark:border-slate-700 font-bold text-slate-600 dark:text-slate-400">${o.orderNo}</td>
+                    <td class="px-6 py-4 border-r dark:border-slate-700 font-medium">${o.salePart}</td>
+                    <td class="px-6 py-4 border-r dark:border-slate-700 text-center font-bold text-slate-500">${o.originQty || (o.qty + (o.shippedQty || 0))}</td>
+                    <td class="px-6 py-4 border-r dark:border-slate-700 text-center font-bold text-accent">${o.shippedQty || 0}</td>
+                    <td class="px-6 py-4 text-center font-black ${o.qty > 0 ? 'text-rose-500' : 'text-slate-300'}">${o.qty}</td>
+                </tr>
+            `).join('');
         }
 
         // --- EXCEL IMPORT ---
@@ -354,11 +412,14 @@
                             if(d instanceof Date) d = d.toISOString().split('T')[0];
                             else d = String(d || todayStr).split(' ')[0];
 
+                            const q = parseInt(r[colMap.qty]) || 0;
+
                             return {
                                 customer: String(r[colMap.customer] || "Unknown").trim(),
                                 salePart: String(r[colMap.salePart] || "N/A").trim(),
                                 deliveryDate: d,
-                                qty: parseInt(r[colMap.qty]) || 0,
+                                qty: q,
+                                originQty: q, // เก็บยอดตั้งต้นไว้
                                 shippedQty: 0,
                                 orderNo: String(r[colMap.orderNo] || "-").trim()
                             };
@@ -373,7 +434,7 @@
                     }
 
                     showToast("Import successful");
-                    showTab('dispatch');
+                    showTab('dashboard'); // กลับไปหน้าแรกเพื่อดูตารางใหม่
                 } catch (err) {
                     alert(err.message);
                 } finally {
