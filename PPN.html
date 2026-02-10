@@ -611,5 +611,65 @@
             showTab('dashboard');
         };
     </script>
+    <!-- เพิ่มโค้ดนี้ก่อนปิด </body> -->
+
+    <!-- Mobile Navigation Bar (Bottom Navigation) -->
+    <nav class="fixed bottom-0 left-0 right-0 md:hidden bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-40">
+        <div class="flex justify-around items-center h-20">
+            <button onclick="showTab('dashboard')" id="m-nav-dashboard" class="flex-1 flex flex-col items-center justify-center gap-1 py-3 text-slate-500 hover:text-primary transition-colors nav-btn-active">
+                <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+                <span class="text-[10px] font-black uppercase tracking-tighter">Dashboard</span>
+            </button>
+            <button onclick="showTab('dispatch')" id="m-nav-dispatch" class="flex-1 flex flex-col items-center justify-center gap-1 py-3 text-slate-500 hover:text-primary transition-colors">
+                <i data-lucide="scan-barcode" class="w-5 h-5"></i>
+                <span class="text-[10px] font-black uppercase tracking-tighter">Dispatch</span>
+            </button>
+            <button onclick="showTab('stock')" id="m-nav-stock" class="flex-1 flex flex-col items-center justify-center gap-1 py-3 text-slate-500 hover:text-primary transition-colors">
+                <i data-lucide="package" class="w-5 h-5"></i>
+                <span class="text-[10px] font-black uppercase tracking-tighter">Inventory</span>
+            </button>
+            <button onclick="showTab('history')" id="m-nav-history" class="flex-1 flex flex-col items-center justify-center gap-1 py-3 text-slate-500 hover:text-primary transition-colors">
+                <i data-lucide="history" class="w-5 h-5"></i>
+                <span class="text-[10px] font-black uppercase tracking-tighter">Logs</span>
+            </button>
+        </div>
+    </nav>
+
+    <style>
+        /* Mobile Navigation Active State */
+        .nav-btn-active {
+            color: #3b82f6 !important;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        
+        /* Adjust main content padding for mobile */
+        @media (max-width: 767px) {
+            main.main-content {
+                padding-bottom: 5rem;
+            }
+        }
+    </style>
+
+    <script>
+        // ...existing code...
+        
+        // Update mobile nav active state
+        const originalShowTab = showTab;
+        showTab = function(tab) {
+            originalShowTab(tab);
+            
+            // Update mobile nav buttons
+            ['dashboard', 'dispatch', 'stock', 'history'].forEach(t => {
+                const btn = document.getElementById(`m-nav-${t}`);
+                if (btn) {
+                    if (t === tab) {
+                        btn.classList.add('nav-btn-active');
+                    } else {
+                        btn.classList.remove('nav-btn-active');
+                    }
+                }
+            });
+        };
+    </script>
 </body>
 </html>
