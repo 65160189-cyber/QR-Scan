@@ -510,16 +510,17 @@
 
         async function updateHistory() {
             const searchInput = document.getElementById('history-search');
-            const query = searchInput ? searchInput.value.toLowerCase() : "";
+            const query = searchInput ? searchInput.value.trim().toLowerCase() : "";
             
             let logs = await db.history.orderBy('id').reverse().toArray();
             
-            // Filter logic for Logs
+            // Filter logic
             if (query) {
                 logs = logs.filter(log => {
                     const customerMatch = log.customer.toLowerCase().includes(query);
                     const itemMatch = log.items.some(item => item.part.toLowerCase().includes(query));
-                    return customerMatch || itemMatch;
+                    const orderNoMatch = log.items.some(item => item.orderNo.toLowerCase().includes(query));
+                    return customerMatch || itemMatch || orderNoMatch;
                 });
             }
 
@@ -527,19 +528,31 @@
             if (container) {
                 if (logs.length === 0) {
                     container.innerHTML = `<div class="col-span-full py-20 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No records found</div>`;
-                    return;
-                }
-                container.innerHTML = logs.map(l => `
-                    <div class="p-5 bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 hover:border-primary transition-all group">
-                        <div class="flex justify-between items-center mb-4">
-                            <span class="text-[9px] font-black bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full text-slate-400">${new Date(l.timestamp).toLocaleString('th-TH')}</span>
-                            <button onclick="viewPastInvoice(${l.id})" class="text-primary hover:scale-110 transition-transform"><i data-lucide="printer" class="w-4 h-4"></i></button>
+                } else {
+                    container.innerHTML = logs.map(l => `
+                        <div class="p-5 bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 hover:border-primary transition-all group">
+                            <div class="flex justify-between items-center mb-4">
+                                <span class="text-[9px] font-black bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full text-slate-400">
+                                    ${new Date(l.timestamp).toLocaleString('th-TH')}
+                                </span>
+                                <button onclick="viewPastInvoice(${l.id})" class="text-primary hover:scale-110 transition-transform p-2">
+                                    <i data-lucide="printer" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <p class="font-black text-xs uppercase mb-3 text-primary truncate">${l.customer}</p>
+                            <div class="space-y-1 border-t border-slate-50 dark:border-slate-800 pt-3">
+                                ${l.items.map(i => `
+                                    <div class="flex justify-between text-[10px] font-bold">
+                                        <span class="truncate pr-2">${i.part}</span>
+                                        <span class="text-accent shrink-0">x${i.qty}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
-                        <p class="font-black text-xs uppercase mb-3 text-primary truncate">${l.customer}</p>
-                        <div class="space-y-1">${l.items.map(i => `<div class="flex justify-between text-[10px] font-bold"><span>${i.part}</span><span class="text-accent">x${i.qty}</span></div>`).join('')}</div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
+            // สำคัญ: ต้องวาดไอคอนใหม่หลังจากเปลี่ยน HTML
             lucide.createIcons();
         }
 
