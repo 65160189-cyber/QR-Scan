@@ -62,7 +62,7 @@
                 <i data-lucide="alert-triangle" class="w-8 h-8"></i>
             </div>
             <h3 class="text-xl font-black mb-2">ล้างข้อมูลทั้งหมด?</h3>
-            <p class="text-slate-500 dark:text-slate-400 text-sm mb-8 font-medium">ข้อมูล Order และประวัติทั้งหมดจะถูกลบถาวร</p>
+            <p class="text-slate-500 dark:text-slate-400 text-sm mb-8 font-medium">ข้อมูล Order และ Inventory จะถูกลบ (Logs จะเก็บไว้)</p>
             <div class="flex flex-col gap-3">
                 <button onclick="clearAllData()" class="w-full bg-rose-500 text-white py-4 rounded-2xl font-black uppercase tracking-widest hover:bg-rose-600 transition-colors">ยืนยันการลบ</button>
                 <button onclick="closeModal('confirm-modal')" class="w-full py-4 text-slate-400 font-bold">ยกเลิก</button>
@@ -227,7 +227,10 @@
 
         <!-- HISTORY TAB -->
         <section id="tab-history" class="hidden space-y-6 animate-in fade-in duration-500">
-            <h2 class="text-3xl font-black uppercase">Dispatch <span class="text-primary">Logs</span></h2>
+            <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                <h2 class="text-3xl font-black uppercase">Dispatch <span class="text-primary">Logs</span></h2>
+                <div class="relative w-full md:w-80"><i data-lucide="search" class="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i><input type="text" id="history-search" placeholder="Search logs..." class="w-full pl-11 pr-4 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs outline-none font-bold"></div>
+            </div>
             <div id="history-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
         </section>
     </main>
@@ -471,6 +474,9 @@
             lucide.createIcons();
         }
 
+        // Multi-shipment variables
+        let multiShipmentItems = [];
+        
         async function openDispatchModal(id) {
             const o = await db.orders.get(id);
             document.getElementById('m-cust').innerText = o.customer;
@@ -522,8 +528,10 @@
         }
 
         async function renderHistory() {
-            const logs = await db.history.orderBy('id').reverse().toArray();
-            document.getElementById('history-container').innerHTML = logs.map(l => `
+            const search = document.getElementById('history-search').value.toUpperCase();
+            let logs = await db.history.orderBy('id').reverse().toArray();
+            if(search) logs = logs.filter(l => l.customer.toUpperCase().includes(search) || l.salePart.toUpperCase().includes(search) || l.orderNo.toUpperCase().includes(search));
+            document.getElementById('history-container').innerHTML = logs.length === 0 ? `<div class="col-span-full py-20 text-center opacity-20 text-xs font-bold uppercase tracking-widest">No logs found</div>` : logs.map(l => `
                 <div class="p-5 bg-white dark:bg-slate-900 border rounded-2xl shadow-sm hover:border-primary transition-all">
                     <div class="flex justify-between items-start mb-3">
                         <span class="text-[8px] font-black bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-400 uppercase tracking-tighter">${new Date(l.timestamp).toLocaleTimeString()}</span>
@@ -599,13 +607,15 @@
         function toggleTheme() { document.documentElement.classList.toggle('dark'); }
         function openConfirmModal() { document.getElementById('confirm-modal').classList.remove('hidden'); lucide.createIcons(); }
         async function clearAllData() {
-            await db.orders.clear(); await db.history.clear();
+            await db.orders.clear();
+            // db.history is kept intact (preserving logs)
             closeModal('confirm-modal'); showTab('dashboard');
-            showToast("Database cleared");
+            showToast("Dispatch and Inventory cleared | Logs preserved");
         }
         
         document.getElementById('dispatch-search').addEventListener('input', updateDispatchList);
         document.getElementById('stock-search').addEventListener('input', updateStockTable);
+        document.getElementById('history-search').addEventListener('input', renderHistory);
         window.onload = () => {
             document.getElementById('current-date-display').innerText = new Date().toLocaleDateString('en-GB', { dateStyle: 'full' });
             showTab('dashboard');

@@ -471,8 +471,11 @@
             if(!val || val <= 0 || val > o.qty) return showToast("Invalid Quantity");
             
             await db.orders.update(id, { qty: o.qty - val, shippedQty: (o.shippedQty || 0) + val });
-            await db.history.add({ customer: o.customer, salePart: o.salePart, qty: val, orderNo: o.orderNo, timestamp: new Date().toISOString() });
-            
+            const hid = await db.history.add({ customer: o.customer, salePart: o.salePart, qty: val, orderNo: o.orderNo, timestamp: new Date().toISOString() });
+
+            // Refresh history UI so the new receipt appears in Logs immediately
+            try { renderHistory(); } catch(e) { console.warn('renderHistory unavailable', e); }
+
             closeModal('dispatch-modal');
             showToast("Dispatch recorded ✅");
             await updateDashboard();
