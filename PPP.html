@@ -120,27 +120,22 @@
             </div>
             
             <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                <!-- Daily Target -->
                 <div class="glass-card p-5 rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between h-28 text-slate-500">
                     <p class="text-[9px] font-black uppercase tracking-widest text-slate-400">Daily Target</p>
                     <h3 id="stat-daily-target" class="text-3xl font-black">500</h3>
                 </div>
-                <!-- Shipped Today (Resets every day) -->
                 <div class="glass-card p-5 rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between h-28 text-accent">
                     <p class="text-slate-400 text-[9px] font-black uppercase tracking-widest">Shipped Today</p>
                     <h3 id="stat-today-shipped" class="text-3xl font-black">0</h3>
                 </div>
-                <!-- Remaining (Target - Shipped Today) -->
                 <div class="glass-card p-5 rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between h-28 text-orange-500">
-                    <p class="text-slate-400 text-[9px] font-black uppercase tracking-widest">Today Rem.</p>
-                    <h3 id="stat-today-remaining" class="text-3xl font-black">500</h3>
+                    <p class="text-slate-400 text-[9px] font-black uppercase tracking-widest">Remaining</p>
+                    <h3 id="stat-today-remaining" class="text-3xl font-black">0</h3>
                 </div>
-                <!-- Delay (Items from past delivery dates that are still pending) -->
                 <div class="glass-card p-5 rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between h-28 text-rose-500">
-                    <p class="text-slate-400 text-[9px] font-black uppercase tracking-widest">Delay (Past)</p>
+                    <p class="text-slate-400 text-[9px] font-black uppercase tracking-widest">Delay</p>
                     <h3 id="stat-overdue" class="text-3xl font-black">0</h3>
                 </div>
-                <!-- Total Load (Today Remaining + Overdue Delay) -->
                 <div class="bg-primary p-5 rounded-3xl shadow-xl flex flex-col justify-between h-28 text-white col-span-2 lg:col-span-1">
                     <p class="text-white/60 text-[9px] font-black uppercase tracking-widest">Total Load</p>
                     <h3 id="stat-total-load" class="text-3xl font-black">0</h3>
@@ -158,7 +153,7 @@
                                     <th class="px-6 py-4">Order Ref</th>
                                     <th class="px-6 py-4">Sale Part</th>
                                     <th class="px-6 py-4 text-center">Due Date</th>
-                                    <th class="px-6 py-4 text-center">Total Item</th>
+                                    <th class="px-6 py-4 text-center">Origin</th>
                                     <th class="px-6 py-4 text-center">Exported</th>
                                     <th class="px-6 py-4 text-center">Rem.</th>
                                 </tr>
@@ -361,8 +356,8 @@
             history: '++id, timestamp, salePart, qty, customer, round, orderNo'
         });
 
-        const DAILY_TARGET = 500;
         const getTodayStr = () => new Date().toISOString().split('T')[0];
+        const todayStr = getTodayStr();
         let selectedRoundInModal = 'เช้า';
 
         function updateClock() {
@@ -396,37 +391,18 @@
         }
 
         async function updateDashboard() {
-            const todayStr = getTodayStr();
-            const allOrders = await db.orders.toArray();
-            const allLogs = await db.history.toArray();
-            
-            // 1. Shipped Today: กรองเฉพาะ Logs ที่เกิดขึ้นใน "วันนี้" เท่านั้น
-            // เมื่อขึ้นวันใหม่ (todayStr เปลี่ยน) ยอดนี้จะกลับเป็น 0 อัตโนมัติ
-            const shippedTodayQty = allLogs
-                .filter(l => l.timestamp && l.timestamp.startsWith(todayStr))
-                .reduce((sum, l) => sum + l.qty, 0);
-            
-            // 2. Today Remaining: ยอดที่ยังขาดเพื่อไปให้ถึงเป้าหมายของวันนี้
-            const remainingToday = Math.max(0, DAILY_TARGET - shippedTodayQty);
+            const all = await db.orders.toArray();
+            const logs = await db.history.toArray();
+            const shippedTodayQty = logs.filter(l => l.timestamp.startsWith(todayStr)).reduce((sum, l) => sum + l.qty, 0);
+            const delay = all.filter(o => o.qty > 0 && o.deliveryDate < todayStr).length;
 
-            // 3. Delay (Past): นับยอด Units ที่ค้างส่ง (qty > 0)
-            // เฉพาะที่มีวันกำหนดส่ง (deliveryDate) "ก่อนหน้า" วันนี้เท่านั้น
-            const delayQty = allOrders
-                .filter(o => o.qty > 0 && o.deliveryDate < todayStr)
-                .reduce((sum, o) => sum + o.qty, 0);
-
-            // 4. Total Load: ยอดที่ยังต้องส่งวันนี้ + ยอดที่ค้างมาจากวันก่อนหน้า
-            const totalLoad = remainingToday + delayQty;
-
-            document.getElementById('stat-daily-target').innerText = DAILY_TARGET;
             document.getElementById('stat-today-shipped').innerText = shippedTodayQty;
-            document.getElementById('stat-today-remaining').innerText = remainingToday;
-            document.getElementById('stat-overdue').innerText = delayQty;
-            document.getElementById('stat-total-load').innerText = totalLoad;
+            document.getElementById('stat-overdue').innerText = delay;
+            document.getElementById('stat-today-remaining').innerText = Math.max(0, 500 - shippedTodayQty);
+            document.getElementById('stat-total-load').innerText = all.reduce((sum, o) => sum + (o.qty + (o.shippedQty || 0)), 0);
 
-            // Render Table (Sorted by Due Date)
             const tbody = document.getElementById('dashboard-table-body');
-            tbody.innerHTML = allOrders.sort((a,b) => a.deliveryDate.localeCompare(b.deliveryDate)).map(o => `
+            tbody.innerHTML = all.sort((a,b) => a.deliveryDate.localeCompare(b.deliveryDate)).map(o => `
                 <tr class="hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
                     <td class="px-6 py-3 font-black text-primary uppercase">${o.customer}</td>
                     <td class="px-6 py-3 font-bold text-slate-400">${o.orderNo}</td>
@@ -472,21 +448,12 @@
                     const rows = raw.slice(raw.indexOf(head) + 1).filter(r => r[map.cust]);
                     let addCount = 0;
                     let updateCount = 0;
-                    const todayStr = getTodayStr();
 
                     for (const r of rows) {
                         const customer = String(r[map.cust] || "").trim();
                         const salePart = String(r[map.part] || "").trim();
                         const orderNo = String(r[map.order] || "-").trim();
-                        // Handle Date from Excel
-                        let deliveryDate = todayStr;
-                        if(r[map.date]) {
-                             if(typeof r[map.date] === 'number') {
-                                 deliveryDate = new Date((r[map.date] - 25569) * 86400 * 1000).toISOString().split('T')[0];
-                             } else {
-                                 deliveryDate = String(r[map.date]).split(' ')[0];
-                             }
-                        }
+                        const deliveryDate = r[map.date] ? (typeof r[map.date] === 'number' ? new Date((r[map.date] - 25569) * 86400 * 1000).toISOString().split('T')[0] : String(r[map.date]).split(' ')[0]) : todayStr;
                         const qtyInFile = parseInt(r[map.qty]) || 0;
 
                         if (qtyInFile <= 0) continue;
@@ -523,7 +490,7 @@
 
                     showToast(`Imported: Added ${addCount}, Updated ${updateCount}`);
                     showTab('dashboard');
-                    e.target.value = '';
+                    e.target.value = ''; 
                 } catch (err) { alert(err.message || "Excel Error"); }
                 finally { toggleLoading(false); }
             };
@@ -560,14 +527,14 @@
             const o = await db.orders.get(id);
             if(!val || val <= 0 || val > o.qty) return showToast("Invalid amount");
             
-            // Update Order
+            // 1. อัปเดตข้อมูลสินค้าในคลัง
             await db.orders.update(id, { 
                 qty: o.qty - val, 
                 shippedQty: (o.shippedQty || 0) + val 
             });
-
-            // Log Transaction
-            const logId = await db.history.add({ 
+            
+            // 2. บันทึก Log ประวัติการส่ง (เพื่อเอาไว้ดูย้อนหลังในหน้า Logs)
+            await db.history.add({ 
                 customer: o.customer, 
                 salePart: o.salePart, 
                 qty: val, 
@@ -576,11 +543,17 @@
                 timestamp: new Date().toISOString() 
             });
 
+            // 3. ปิด Modal ทันทีและแจ้งเตือน
             closeModal('dispatch-modal');
-            showToast(`Shipped ${val} units (รอบ${selectedRoundInModal})`);
-            updateDashboard();
-            updateDispatchList();
-            viewInvoice(logId);
+            showToast(`ส่งสินค้าสำเร็จ ${val} ชิ้น (รอบ${selectedRoundInModal})`);
+            
+            // 4. รีเฟรชข้อมูลหน้าจอ (UI updates)
+            if(!document.getElementById('tab-dashboard').classList.contains('hidden')) updateDashboard();
+            if(!document.getElementById('tab-dispatch').classList.contains('hidden')) {
+                updateDispatchList();
+                barcodeInput.focus(); // คืน Focus ให้ช่องแสกน
+            }
+            if(!document.getElementById('tab-stock').classList.contains('hidden')) updateStockTable();
         }
 
         async function updateDispatchList() {
