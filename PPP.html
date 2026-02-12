@@ -143,7 +143,7 @@
                     <h3 id="stat-today-remaining" class="text-3xl font-black">0</h3>
                 </div>
                 <div class="glass-card p-5 rounded-3xl border border-slate-100 dark:border-slate-800 flex flex-col justify-between h-28 text-rose-500">
-                    <p class="text-slate-400 text-[9px] font-black uppercase tracking-widest">Delay</p>
+                    <p class="text-slate-400 text-[9px] font-black uppercase tracking-widest">Delay SKUs</p>
                     <h3 id="stat-overdue" class="text-3xl font-black">0</h3>
                 </div>
                 <div class="bg-primary p-5 rounded-3xl shadow-xl flex flex-col justify-between h-28 text-white col-span-2 lg:col-span-1">
@@ -209,7 +209,10 @@
             
             <div class="space-y-4">
                 <div class="flex items-center justify-between px-2">
-                    <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Order Queue</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Merged Dispatch Queue</span>
+                        <span class="bg-slate-100 dark:bg-slate-800 text-[8px] font-black text-slate-400 px-2 py-0.5 rounded-full uppercase italic">Grouped by Part No.</span>
+                    </div>
                     <button onclick="clearSelection()" id="clear-selection-btn-list" class="hidden text-[9px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1 hover:underline">
                         <i data-lucide="x" class="w-3 h-3"></i><span>ยกเลิกการเลือกทั้งหมด</span>
                     </button>
@@ -470,7 +473,9 @@
         const getTodayStr = () => new Date().toISOString().split('T')[0];
         const todayStr = getTodayStr();
         let selectedRoundInModal = 'เช้า';
-        let selectedOrderIds = new Set();
+        
+        // key format for grouping: `${customer}|${salePart}|${orderNo}`
+        let selectedGroupKeys = new Set();
 
         function updateClock() {
             const now = new Date();
@@ -586,18 +591,19 @@
             html2pdf().set(opt).from(el).save();
         }
 
-        function toggleOrderSelection(id) {
-            if (selectedOrderIds.has(id)) {
-                selectedOrderIds.delete(id);
+        // Logic To Merge/Group in Dispatch Center
+        function toggleGroupSelection(groupKey) {
+            if (selectedGroupKeys.has(groupKey)) {
+                selectedGroupKeys.delete(groupKey);
             } else {
-                selectedOrderIds.add(id);
+                selectedGroupKeys.add(groupKey);
             }
             updateShipmentBar();
             updateDispatchList(); 
         }
 
         function clearSelection() {
-            selectedOrderIds.clear();
+            selectedGroupKeys.clear();
             updateShipmentBar();
             updateDispatchList();
             showToast("ยกเลิกการเลือกทั้งหมดแล้ว");
@@ -606,10 +612,10 @@
         function updateShipmentBar() {
             const bar = document.getElementById('shipment-bar');
             const clearBtnList = document.getElementById('clear-selection-btn-list');
-            if (selectedOrderIds.size > 0) {
+            if (selectedGroupKeys.size > 0) {
                 bar.classList.remove('hidden');
                 if(clearBtnList) clearBtnList.classList.remove('hidden');
-                document.getElementById('selected-count-label').innerText = `${selectedOrderIds.size} รายการที่เลือกไว้`;
+                document.getElementById('selected-count-label').innerText = `${selectedGroupKeys.size} รายการที่รวมมา (Selected)`;
             } else {
                 bar.classList.add('hidden');
                 if(clearBtnList) clearBtnList.classList.add('hidden');
@@ -617,26 +623,40 @@
         }
 
         async function openMultiDispatchModal() {
-            const ids = Array.from(selectedOrderIds);
-            const items = await Promise.all(ids.map(id => db.orders.get(id)));
+            const keys = Array.from(selectedGroupKeys);
+            const allOrders = await db.orders.where('qty').above(0).toArray();
+            
+            const groupData = keys.map(key => {
+                const parts = key.split('|');
+                const [cust, part, order] = parts;
+                const relevantOrders = allOrders.filter(o => o.customer === cust && o.salePart === part && o.orderNo === order);
+                const totalQty = relevantOrders.reduce((s, o) => s + o.qty, 0);
+                return {
+                    key,
+                    customer: cust,
+                    salePart: part,
+                    orderNo: order,
+                    totalQty
+                };
+            });
             
             const listEl = document.getElementById('multi-dispatch-list');
-            listEl.innerHTML = items.map(o => `
+            listEl.innerHTML = groupData.map(g => `
                 <div class="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-3xl border border-slate-100 dark:border-slate-800/50">
                     <div class="flex justify-between items-start mb-3">
                         <div class="min-w-0 flex-1 pr-2">
-                            <p class="text-[9px] font-black text-primary uppercase">${o.customer}</p>
-                            <h4 class="font-black text-xs truncate uppercase">${o.salePart}</h4>
-                            <p class="text-[8px] font-bold text-slate-400 uppercase">${o.orderNo} | Due: ${o.deliveryDate}</p>
+                            <p class="text-[9px] font-black text-primary uppercase">${g.customer}</p>
+                            <h4 class="font-black text-xs truncate uppercase">${g.salePart}</h4>
+                            <p class="text-[8px] font-bold text-slate-400 uppercase">${g.orderNo}</p>
                         </div>
                         <div class="text-right">
-                             <p class="text-[8px] font-black text-slate-300 uppercase">คงเหลือ</p>
-                             <p class="font-black text-sm">${o.qty}</p>
+                             <p class="text-[8px] font-black text-slate-300 uppercase">ยอดรวมค้างส่ง</p>
+                             <p class="font-black text-sm text-primary">${g.totalQty}</p>
                         </div>
                     </div>
                     <div class="relative">
-                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">ส่ง:</span>
-                        <input type="number" id="qty-input-${o.id}" value="${o.qty}" max="${o.qty}" min="1"
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400 uppercase">ส่งจริง:</span>
+                        <input type="number" id="qty-input-${btoa(g.key)}" value="${g.totalQty}" max="${g.totalQty}" min="1"
                                class="w-full bg-white dark:bg-slate-900 border-2 border-transparent focus:border-primary pl-12 pr-4 py-3 rounded-2xl outline-none font-black text-lg">
                     </div>
                 </div>
@@ -648,28 +668,41 @@
         }
 
         async function executeMultiDispatch() {
-            const ids = Array.from(selectedOrderIds);
-            const itemsToShip = [];
-            let totalQty = 0;
-            let primaryCustomer = "";
+            const keys = Array.from(selectedGroupKeys);
+            const allOrders = await db.orders.where('qty').above(0).toArray();
+            const itemsInBill = [];
             const destination = document.getElementById('multi-select-destination').value;
+            let primaryCustomer = "";
 
-            for(const id of ids) {
-                const o = await db.orders.get(id);
-                const inputVal = parseInt(document.getElementById(`qty-input-${id}`).value);
+            for(const key of keys) {
+                const inputVal = parseInt(document.getElementById(`qty-input-${btoa(key)}`).value);
+                const parts = key.split('|');
+                const [cust, part, order] = parts;
+                primaryCustomer = cust;
+
+                if(!inputVal || inputVal <= 0) continue;
+
+                // FIFO: จัดการตัดยอดทีละใบจากวันที่เก่าสุด
+                const relevantOrders = allOrders
+                    .filter(o => o.customer === cust && o.salePart === part && o.orderNo === order)
+                    .sort((a,b) => a.deliveryDate.localeCompare(b.deliveryDate));
                 
-                if(!inputVal || inputVal <= 0 || inputVal > o.qty) {
-                    showToast(`จำนวนไม่ถูกต้อง: ${o.salePart}`);
-                    return;
+                let remainingToDeduct = inputVal;
+                for(let orderItem of relevantOrders) {
+                    if(remainingToDeduct <= 0) break;
+                    
+                    const canTake = Math.min(orderItem.qty, remainingToDeduct);
+                    await db.orders.update(orderItem.id, {
+                        qty: orderItem.qty - canTake,
+                        shippedQty: (orderItem.shippedQty || 0) + canTake
+                    });
+                    remainingToDeduct -= canTake;
                 }
 
-                itemsToShip.push({ orderId: id, salePart: o.salePart, orderNo: o.orderNo, qty: inputVal });
-                totalQty += inputVal;
-                primaryCustomer = o.customer;
-
-                await db.orders.update(id, { 
-                    qty: o.qty - inputVal, 
-                    shippedQty: (o.shippedQty || 0) + inputVal 
+                itemsInBill.push({
+                    salePart: part,
+                    orderNo: order,
+                    qty: inputVal
                 });
             }
 
@@ -677,50 +710,82 @@
                 customer: primaryCustomer,
                 timestamp: new Date().toISOString(),
                 round: selectedRoundInModal,
-                itemsJson: JSON.stringify(itemsToShip),
+                itemsJson: JSON.stringify(itemsInBill),
                 destination: destination
             });
 
             closeModal('multi-dispatch-modal');
-            
-            selectedOrderIds.clear(); 
+            selectedGroupKeys.clear(); 
             updateShipmentBar();
             updateDispatchList(); 
-
-            showToast(`ส่งสินค้าเรียบร้อย ${totalQty} ชิ้น`);
-            
+            showToast(`ส่งสินค้าเรียบร้อย`);
             viewInvoice(historyId);
             updateDashboard();
         }
 
         async function updateDispatchList() {
             const search = document.getElementById('barcode-input').value.toUpperCase();
-            let list = await db.orders.where('qty').above(0).toArray();
+            let rawList = await db.orders.where('qty').above(0).toArray();
+            
+            // Grouping Logic
+            const groups = {};
+            rawList.forEach(o => {
+                const key = `${o.customer}|${o.salePart}|${o.orderNo}`;
+                if (!groups[key]) {
+                    groups[key] = {
+                        customer: o.customer,
+                        salePart: o.salePart,
+                        orderNo: o.orderNo,
+                        totalQty: 0,
+                        dates: [],
+                        key: key
+                    };
+                }
+                groups[key].totalQty += o.qty;
+                if (!groups[key].dates.includes(o.deliveryDate)) {
+                    groups[key].dates.push(o.deliveryDate);
+                }
+            });
+
+            let list = Object.values(groups);
             
             if(search) {
-                list = list.filter(o => 
-                    o.customer.toUpperCase().includes(search) || 
-                    o.salePart.toUpperCase().includes(search) ||
-                    o.orderNo.toUpperCase().includes(search)
+                list = list.filter(g => 
+                    g.customer.toUpperCase().includes(search) || 
+                    g.salePart.toUpperCase().includes(search) ||
+                    g.orderNo.toUpperCase().includes(search)
                 );
             }
             
             const container = document.getElementById('dispatch-list-container');
-            container.innerHTML = list.length === 0 ? `<div class="col-span-full py-20 text-center opacity-20 text-xs font-bold uppercase italic">ไม่มีรายการที่รอดำเนินการ</div>` : list.map(o => {
-                const isSelected = selectedOrderIds.has(o.id);
+            if (list.length === 0) {
+                container.innerHTML = `<div class="col-span-full py-20 text-center opacity-20 text-xs font-bold uppercase italic">ไม่มีรายการที่รอดำเนินการ</div>`;
+                return;
+            }
+
+            container.innerHTML = list.map(g => {
+                const isSelected = selectedGroupKeys.has(g.key);
+                const isDelayed = g.dates.some(d => d < todayStr);
+                const dateDisplay = g.dates.length > 1 
+                    ? `Mixed (${g.dates.length} Days)` 
+                    : g.dates[0];
+
                 return `
-                <div onclick="toggleOrderSelection(${o.id})" class="cursor-pointer bg-white dark:bg-slate-900 p-5 rounded-3xl border ${isSelected ? 'border-primary ring-2 ring-primary/10' : 'border-slate-100 dark:border-slate-800'} transition-all group shadow-sm flex items-center gap-4 active:scale-95">
+                <div onclick="toggleGroupSelection('${g.key}')" class="cursor-pointer bg-white dark:bg-slate-900 p-5 rounded-3xl border ${isSelected ? 'border-primary ring-2 ring-primary/10' : 'border-slate-100 dark:border-slate-800'} transition-all group shadow-sm flex items-center gap-4 active:scale-95">
                     <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-primary border-primary text-white' : 'border-slate-200 dark:border-slate-700'}">
                         ${isSelected ? '<i data-lucide="check" class="w-3.5 h-3.5"></i>' : ''}
                     </div>
                     <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 mb-0.5"><span class="text-[9px] font-black text-primary uppercase tracking-tighter">${o.customer}</span></div>
-                        <h4 class="font-black text-sm truncate uppercase tracking-tight">${o.salePart}</h4>
-                        <p class="text-[8px] font-bold text-slate-400 mt-0.5 uppercase">${o.orderNo} | Due: ${o.deliveryDate}</p>
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <span class="text-[9px] font-black text-primary uppercase tracking-tighter">${g.customer}</span>
+                            ${isDelayed ? '<span class="text-[7px] bg-rose-500 text-white px-1.5 rounded-full font-black uppercase">DELAY</span>' : ''}
+                        </div>
+                        <h4 class="font-black text-sm truncate uppercase tracking-tight">${g.salePart}</h4>
+                        <p class="text-[8px] font-bold text-slate-400 mt-0.5 uppercase">${g.orderNo} | ${dateDisplay}</p>
                     </div>
                     <div class="text-right">
-                        <p class="text-[8px] font-black text-slate-300 uppercase">Stock</p>
-                        <p class="font-black text-xl leading-none">${o.qty}</p>
+                        <p class="text-[8px] font-black text-slate-300 uppercase">รวมค้าง</p>
+                        <p class="font-black text-xl leading-none">${g.totalQty}</p>
                     </div>
                 </div>
             `}).join('');
@@ -896,7 +961,6 @@
         function toggleTheme() { document.documentElement.classList.toggle('dark'); }
         function openConfirmModal() { document.getElementById('confirm-modal').classList.remove('hidden'); }
         
-        // ฟังก์ชันใหม่: ลบเฉพาะข้อมูล Orders แต่เก็บ History (Bill) ไว้
         async function clearOrdersOnly() { 
             await db.orders.clear(); 
             closeModal('confirm-modal'); 
